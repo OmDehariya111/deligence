@@ -1,0 +1,59 @@
+# ============================================================
+# DeligenX Platform — Python Dependencies
+# ============================================================
+
+# ── Web Framework & API ─────────────────────────────────────
+fastapi
+uvicorn[standard]
+python-multipart
+fastapi-cache2[redis]
+
+# ── Database ────────────────────────────────────────────────
+sqlalchemy
+psycopg2-binary
+redis
+
+# ── Background Tasks ───────────────────────────────────────
+celery
+
+# ── Authentication & Security ──────────────────────────────
+python-jose[cryptography]
+bcrypt
+email-validator
+
+# ── Payments ───────────────────────────────────────────────
+stripe==10.1.0
+
+# ── Email ──────────────────────────────────────────────────
+resend
+
+# ── AI / LLM ──────────────────────────────────────────────
+crewai
+crewai-tools
+litellm
+sentence-transformers
+chromadb
+
+# ── Data Providers & MCP ───────────────────────────────────
+fastmcp
+yfinance
+requests
+httpx
+
+# ── Data Processing ────────────────────────────────────────
+pydantic
+pandas
+numpy
+beautifulsoup4
+vaderSentiment
+PyMuPDF
+
+# ── Document Generation ───────────────────────────────────
+python-docx
+playwright
+
+# ── Configuration ─────────────────────────────────────────
+python-dotenv
+
+# ── Testing ───────────────────────────────────────────────
+pytest

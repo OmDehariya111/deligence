@@ -1,0 +1,141 @@
+{
+  "timestamp": "2026-07-27T08:40:53.434337Z",
+  "company_identity": {
+    "company_name": "MICROSOFT CORP",
+    "cik": "0000789019",
+    "sic_code": "7372",
+    "industry_name": "Services-Prepackaged Software",
+    "exchange": "Nasdaq",
+    "state_of_incorp": "WA",
+    "fiscal_year_end": "0630",
+    "fiscal_year_end_month": 6
+  },
+  "selected_filings": {
+    "ten_k": [
+      {
+        "form": "10-K",
+        "filing_date": "2025-07-30",
+        "accession_number": "0000950170-25-100235"
+      },
+      {
+        "form": "10-K",
+        "filing_date": "2024-07-30",
+        "accession_number": "0000950170-24-087843"
+      },
+      {
+        "form": "10-K",
+        "filing_date": "2023-07-27",
+        "accession_number": "0000950170-23-035122"
+      }
+    ],
+    "eight_k": [
+      {
+        "form": "8-K",
+        "filing_date": "2026-06-05",
+        "accession_number": "0001193125-26-258667"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-05-14",
+        "accession_number": "0001193125-26-224155"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-04-29",
+        "accession_number": "0001193125-26-191457"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-01-28",
+        "accession_number": "0001193125-26-027198"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-12-08",
+        "accession_number": "0001193125-25-311196"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-10-29",
+        "accession_number": "0001193125-25-256310"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-09-30",
+        "accession_number": "0001193125-25-225125"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-07-30",
+        "accession_number": "0000950170-25-100226"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-07-01",
+        "accession_number": "0001193125-25-154103"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-04-30",
+        "accession_number": "0000950170-25-061032"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-01-29",
+        "accession_number": "0000950170-25-010484"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-01-22",
+        "accession_number": "0001193125-25-010492"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-12-11",
+        "accession_number": "0001193125-24-275524"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-12-03",
+        "accession_number": "0000950170-24-132722"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-10-30",
+        "accession_number": "0000950170-24-118955"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-08-21",
+        "accession_number": "0001193125-24-204403"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-07-30",
+        "accession_number": "0000950170-24-087835"
+      }
+    ],
+    "def_14a": {
+      "form": "DEF 14A",
+      "filing_date": "2025-10-21",
+      "accession_number": "0001193125-25-245150"
+    },
+    "ten_q": [
+      {
+        "form": "10-Q",
+        "filing_date": "2026-04-29",
+        "accession_number": "0001193125-26-191507"
+      },
+      {
+        "form": "10-Q",
+        "filing_date": "2026-01-28",
+        "accession_number": "0001193125-26-027207"
+      },
+      {
+        "form": "10-Q",
+        "filing_date": "2025-10-29",
+        "accession_number": "0001193125-25-256321"
+      }
+    ]
+  }
+}

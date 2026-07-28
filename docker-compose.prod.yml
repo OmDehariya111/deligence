@@ -1,0 +1,73 @@
+# ============================================================
+# DeligenX Production Docker Compose — Backend Only
+# Frontend is deployed separately on Vercel.
+# ============================================================
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+# ============================================================
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: deligenx_redis_prod
+    restart: unless-stopped
+    volumes:
+      - redis_data_prod:/data
+
+  db:
+    image: postgres:15-alpine
+    container_name: deligenx_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-deligenx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deligenxpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-deligenxdb}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: deligenx_backend_prod
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-deligenx}:${POSTGRES_PASSWORD:-deligenxpassword}@db:5432/${POSTGRES_DB:-deligenxdb}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - output_data_prod:/app/output
+      - logs_data_prod:/app/logs
+      - ./deligenx.json:/app/deligenx.json:ro
+
+  celery_worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: deligenx_celery_worker_prod
+    restart: unless-stopped
+    command: ["celery", "-A", "api.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-deligenx}:${POSTGRES_PASSWORD:-deligenxpassword}@db:5432/${POSTGRES_DB:-deligenxdb}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    volumes:
+      - output_data_prod:/app/output
+      - logs_data_prod:/app/logs
+      - ./deligenx.json:/app/deligenx.json:ro
+
+volumes:
+  redis_data_prod:
+  postgres_data_prod:
+  output_data_prod:
+  logs_data_prod:

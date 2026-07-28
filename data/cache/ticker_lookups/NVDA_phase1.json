@@ -1,0 +1,151 @@
+{
+  "timestamp": "2026-07-24T08:01:21.241776Z",
+  "company_identity": {
+    "company_name": "NVIDIA CORP",
+    "cik": "0001045810",
+    "sic_code": "3674",
+    "industry_name": "Semiconductors & Related Devices",
+    "exchange": "Nasdaq",
+    "state_of_incorp": "DE",
+    "fiscal_year_end": "0131",
+    "fiscal_year_end_month": 1
+  },
+  "selected_filings": {
+    "ten_k": [
+      {
+        "form": "10-K",
+        "filing_date": "2026-02-25",
+        "accession_number": "0001045810-26-000021"
+      },
+      {
+        "form": "10-K",
+        "filing_date": "2025-02-26",
+        "accession_number": "0001045810-25-000023"
+      },
+      {
+        "form": "10-K",
+        "filing_date": "2024-02-21",
+        "accession_number": "0001045810-24-000029"
+      }
+    ],
+    "eight_k": [
+      {
+        "form": "8-K",
+        "filing_date": "2026-07-02",
+        "accession_number": "0001045810-26-000060"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-06-30",
+        "accession_number": "0001045810-26-000056"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-06-18",
+        "accession_number": "0001193125-26-275783"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-05-20",
+        "accession_number": "0001045810-26-000051"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-05-08",
+        "accession_number": "0001045810-26-000028"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-04-27",
+        "accession_number": "0001045810-26-000026"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-03-06",
+        "accession_number": "0001045810-26-000024"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-02-25",
+        "accession_number": "0001045810-26-000019"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2026-01-23",
+        "accession_number": "0001045810-26-000003"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-11-19",
+        "accession_number": "0001045810-25-000228"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-08-27",
+        "accession_number": "0001045810-25-000207"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-08-05",
+        "accession_number": "0001045810-25-000197"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-07-01",
+        "accession_number": "0001045810-25-000179"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-05-28",
+        "accession_number": "0001045810-25-000115"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-04-15",
+        "accession_number": "0001045810-25-000082"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-03-07",
+        "accession_number": "0001045810-25-000039"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-02-26",
+        "accession_number": "0001045810-25-000021"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2025-01-17",
+        "accession_number": "0001045810-25-000007"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-11-20",
+        "accession_number": "0001045810-24-000315"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-11-07",
+        "accession_number": "0001045810-24-000300"
+      },
+      {
+        "form": "8-K",
+        "filing_date": "2024-08-28",
+        "accession_number": "0001045810-24-000262"
+      }
+    ],
+    "def_14a": {
+      "form": "DEF 14A",
+      "filing_date": "2026-05-12",
+      "accession_number": "0001045810-26-000036"
+    },
+    "ten_q": [
+      {
+        "form": "10-Q",
+        "filing_date": "2026-05-20",
+        "accession_number": "0001045810-26-000052"
+      }
+    ]
+  }
+}

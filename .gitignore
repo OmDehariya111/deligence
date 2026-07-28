@@ -1,0 +1,62 @@
+# ============================================================
+# DeligenX Platform - Root .gitignore
+# ============================================================
+
+# ── Secrets & Credentials (NEVER commit these) ──────────────
+.env
+.env.*
+!.env.example
+deligenx.json
+*.pem
+*.key
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.Python
+
+# ── Generated Output & Runtime Data ─────────────────────────
+output/
+logs/
+temp/
+.cache/
+
+# ── Frontend (handled by frontend/.gitignore too) ───────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts
+
+# ── Docker Volumes & Runtime ────────────────────────────────
+data/certbot/
+postgres_data/
+redis_data/
+
+# ── IDE & OS ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Misc dev/test files ─────────────────────────────────────
+rows.txt
+test.py
+working.md
+*.log

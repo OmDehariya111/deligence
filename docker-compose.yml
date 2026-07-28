@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: deligenx_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  db:
+    image: postgres:15-alpine
+    container_name: deligenx_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deligenx
+      POSTGRES_PASSWORD: deligenxpassword
+      POSTGRES_DB: deligenxdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  redis_data:
+  postgres_data:

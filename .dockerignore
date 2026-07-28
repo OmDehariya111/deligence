@@ -1,0 +1,53 @@
+# ============================================================
+# Docker Build Context Exclusions
+# Without this, Docker would copy GBs of unnecessary files
+# into the build context, making builds extremely slow.
+# ============================================================
+
+# Git
+.git
+.gitignore
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Frontend (deployed separately on Vercel)
+frontend/
+
+# Generated output & runtime data
+output/
+logs/
+temp/
+.cache/
+
+# Docker files (no need to copy themselves)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Secrets (mounted as volume, not baked into image)
+.env
+deligenx.json
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docs & tests (not needed in production image)
+docs/
+tests/
+*.md
+!README.md
+
+# Nginx (no longer used in prod)
+nginx/
+
+# Misc
+data/certbot/
+.agents/
