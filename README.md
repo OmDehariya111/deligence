@@ -118,7 +118,6 @@ deligence/
 ├── schemas/                 # Pydantic models
 ├── utils/                   # Shared utilities
 ├── tools/                   # Admin tools
-├── docs/                    # Workflow documentation
 ├── tests/                   # Test suites
 ├── .env.example             # Environment variables template
 ├── crew.py                  # CrewAI orchestration
