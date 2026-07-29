@@ -3,10 +3,11 @@
 import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/providers/auth-provider";
-import { Meteors } from "@/components/ui-effects/meteors";
-import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { Mail, Lock, ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 import { API_URL } from "@/lib/auth";
 import Link from "next/link";
+import { Logo } from "@/components/site/Logo";
 
 function LoginForm() {
   const [email, setEmail] = useState("");
@@ -34,7 +35,7 @@ function LoginForm() {
         const data = await res.json();
         setUser(data.user);
         const next = searchParams.get("next");
-        const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : "/";
+        const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
         router.replace(safeNext);
       } else {
         const errData = await res.json();
@@ -48,94 +49,136 @@ function LoginForm() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden selection:bg-emerald-500/30">
-      <Meteors number={20} />
-      
-      <div className="relative z-10 w-full max-w-md p-8 md:p-12">
-        <div className="absolute inset-0 bg-white/5 backdrop-blur-3xl rounded-3xl border border-white/10 shadow-2xl"></div>
-        
-        <div className="relative flex flex-col items-center text-center">
-          <div className="w-16 h-16 bg-gradient-to-tr from-emerald-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-6">
-            <Lock className="text-white w-8 h-8" />
+    <div className="relative min-h-screen flex items-center justify-center bg-background overflow-hidden">
+      {/* Background radial glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 50% at 50% 30%, rgba(57,255,136,0.12), transparent 70%), radial-gradient(ellipse 40% 40% at 80% 80%, rgba(57,255,136,0.06), transparent 70%)",
+        }}
+      />
+
+      {/* Back to home */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="absolute left-6 top-6 z-20"
+      >
+        <Link href="/" className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground">
+          <Logo />
+        </Link>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        className="relative z-10 w-full max-w-md px-6"
+      >
+        <div className="glass rounded-2xl p-8 md:p-10">
+          {/* Icon */}
+          <div className="mb-6 flex flex-col items-center text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/15 border border-primary/30 mb-5">
+              <ShieldCheck className="h-7 w-7 text-primary" />
+            </div>
+            <h1 className="font-sans text-2xl font-semibold tracking-[-0.02em] text-foreground">
+              Welcome back
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sign in to access your due diligence dashboard.
+            </p>
           </div>
-          
-          <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Welcome back</h1>
-          <p className="text-gray-400 text-sm mb-8">Enter your credentials to access the No1 Platform.</p>
 
-          <form onSubmit={handleLogin} className="w-full space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-left">
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-lg border border-risk/30 bg-risk/10 p-3 text-sm text-risk"
+              >
                 {error}
-              </div>
+              </motion.div>
             )}
-            
-              <div className="space-y-2">
-                <div className="relative">
-                <label htmlFor="login-email" className="sr-only">Email address</label>
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  id="login-email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                  required
-                />
-              </div>
+
+            {/* Email */}
+            <div className="relative">
+              <label htmlFor="login-email" className="sr-only">Email address</label>
+              <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                id="login-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="w-full rounded-lg border border-border bg-background/60 py-3 pl-10 pr-4 text-sm text-foreground placeholder-muted-foreground/60 outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                required
+              />
             </div>
 
-              <div className="space-y-2">
-                <div className="relative">
-                <label htmlFor="login-password" className="sr-only">Password</label>
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  id="login-password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                  required
-                />
-              </div>
+            {/* Password */}
+            <div className="relative">
+              <label htmlFor="login-password" className="sr-only">Password</label>
+              <Lock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                id="login-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="w-full rounded-lg border border-border bg-background/60 py-3 pl-10 pr-4 text-sm text-foreground placeholder-muted-foreground/60 outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                required
+              />
             </div>
 
-            <button
+            {/* Submit */}
+            <motion.button
               type="submit"
               disabled={loading}
-              className="w-full relative group overflow-hidden rounded-xl bg-white text-black font-semibold py-3 flex items-center justify-center transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:hover:scale-100"
+              whileHover={{ scale: loading ? 1 : 1.01 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
+              className="group flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground neon-glow transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
                   <span>Sign In</span>
-                  <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </>
               )}
-            </button>
+            </motion.button>
           </form>
 
-          <p className="mt-8 text-sm text-gray-400">
+          <p className="mt-7 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-white font-medium hover:underline hover:text-emerald-400 transition-colors">
+            <Link
+              href="/signup"
+              className="font-medium text-primary transition-colors hover:text-primary/80"
+            >
               Sign up
             </Link>
           </p>
         </div>
-      </div>
+
+        {/* Subtle tagline */}
+        <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">
+          Autonomous due diligence · institutional grade
+        </p>
+      </motion.div>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
       <LoginForm />
     </Suspense>
   );

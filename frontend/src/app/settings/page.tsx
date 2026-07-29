@@ -1,292 +1,211 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useAuth } from "@/components/providers/auth-provider";
-import { User, Lock, Sliders, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { API_URL } from "@/lib/auth";
+import { useAuth } from "@/components/providers/auth-provider";
+import { User, Shield, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function SettingsPage() {
-  const { user, setUser } = useAuth();
-  const [activeTab, setActiveTab] = useState("profile");
-
-  // Profile Form State
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  // Security Form State
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
+  
+  // Profile State
+  const [fullName, setFullName] = useState(user?.full_name || "");
+  const [email, setEmail] = useState(user?.email || "");
+  
+  // Security State
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [securityLoading, setSecurityLoading] = useState(false);
-  const [securityMessage, setSecurityMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  
+  // Feedback State
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error", text: string } | null>(null);
 
-  // Initialize fields when user loads
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (user) {
-        setFullName(user.full_name || "");
-        setEmail(user.email || "");
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [user]);
-
-  const handleProfileSubmit = async (e: React.FormEvent) => {
+  const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfileLoading(true);
-    setProfileMessage(null);
-
+    setLoading(true);
+    setMessage(null);
     try {
       const res = await fetch(`${API_URL}/auth/me`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: fullName, email }),
         credentials: "include",
+        body: JSON.stringify({ full_name: fullName, email }),
       });
-
-      if (res.ok) {
-        const updatedUser = await res.json();
-        setUser(updatedUser); // Update globally
-        setProfileMessage({ type: "success", text: "Profile updated successfully!" });
-      } else {
-        const errorData = await res.json();
-        setProfileMessage({ type: "error", text: errorData.detail || "Failed to update profile." });
-      }
-    } catch {
-      setProfileMessage({ type: "error", text: "Network error occurred." });
+      if (!res.ok) throw new Error("Failed to update profile");
+      setMessage({ type: "success", text: "Profile updated successfully" });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
     } finally {
-      setProfileLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleSecuritySubmit = async (e: React.FormEvent) => {
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSecurityLoading(true);
-    setSecurityMessage(null);
-
+    setLoading(true);
+    setMessage(null);
     try {
       const res = await fetch(`${API_URL}/auth/password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
         credentials: "include",
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
-
-      if (res.ok) {
-        setSecurityMessage({ type: "success", text: "Password changed successfully!" });
-        setCurrentPassword("");
-        setNewPassword("");
-      } else {
-        const errorData = await res.json();
-        setSecurityMessage({ type: "error", text: errorData.detail || "Failed to change password." });
-      }
-    } catch {
-      setSecurityMessage({ type: "error", text: "Network error occurred." });
+      if (!res.ok) throw new Error("Failed to update password");
+      setMessage({ type: "success", text: "Password updated successfully" });
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
     } finally {
-      setSecurityLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-white">Settings</h1>
+    <div className="min-h-screen bg-[#0a0a0a] text-foreground p-6 md:p-12 relative overflow-hidden">
+      {/* Background Glow */}
+      <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
+      
+      <div className="max-w-4xl mx-auto relative z-10 grid grid-cols-1 md:grid-cols-4 gap-8">
         
-        <div className="flex flex-col md:flex-row gap-8">
-          
-          {/* Sidebar */}
-          <aside className="w-full md:w-64 flex-shrink-0">
-            <nav className="flex flex-col space-y-1">
-              <button
-                onClick={() => setActiveTab("profile")}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeTab === "profile" 
-                    ? "bg-white/10 text-white font-medium border border-white/20" 
-                    : "text-gray-400 hover:bg-white/5 hover:text-white"
+        <div className="md:col-span-1">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col gap-2"
+          >
+            <h1 className="text-3xl font-bold mb-4">Settings</h1>
+            <button 
+              onClick={() => { setActiveTab("profile"); setMessage(null); }}
+              className={`flex items-center gap-3 p-3 rounded-lg text-left transition-all ${
+                activeTab === "profile" 
+                  ? "bg-primary/10 text-primary border border-primary/30" 
+                  : "hover:bg-white/5 text-muted-foreground border border-transparent"
+              }`}
+            >
+              <User className="w-5 h-5" />
+              <span className="font-medium">Profile</span>
+            </button>
+            <button 
+              onClick={() => { setActiveTab("security"); setMessage(null); }}
+              className={`flex items-center gap-3 p-3 rounded-lg text-left transition-all ${
+                activeTab === "security" 
+                  ? "bg-primary/10 text-primary border border-primary/30" 
+                  : "hover:bg-white/5 text-muted-foreground border border-transparent"
+              }`}
+            >
+              <Shield className="w-5 h-5" />
+              <span className="font-medium">Security</span>
+            </button>
+          </motion.div>
+        </div>
+
+        <div className="md:col-span-3">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="glass rounded-xl p-8 border border-border"
+          >
+            {message && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`p-4 rounded-md mb-6 flex items-start gap-3 border ${
+                  message.type === "success" 
+                    ? "bg-primary/10 border-primary/30 text-primary" 
+                    : "bg-[#ff5c5c]/10 border-[#ff5c5c]/30 text-[#ff5c5c]"
                 }`}
               >
-                <User size={18} />
-                <span>Profile</span>
-              </button>
-              
-              <button
-                onClick={() => setActiveTab("security")}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeTab === "security" 
-                    ? "bg-white/10 text-white font-medium border border-white/20" 
-                    : "text-gray-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Lock size={18} />
-                <span>Security</span>
-              </button>
+                {message.type === "success" ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
+                <p className="text-sm font-medium">{message.text}</p>
+              </motion.div>
+            )}
 
-              <button
-                onClick={() => setActiveTab("preferences")}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeTab === "preferences" 
-                    ? "bg-white/10 text-white font-medium border border-white/20" 
-                    : "text-gray-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Sliders size={18} />
-                <span>Preferences</span>
-              </button>
-            </nav>
-          </aside>
-
-          {/* Main Content Area */}
-          <main className="flex-1">
-            <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 relative overflow-hidden group">
-              {/* Background Glow */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[150%] h-[150%] opacity-20 pointer-events-none radial-gradient-glow transition-opacity duration-700" />
-              
-              <div className="relative z-10">
-                {activeTab === "profile" && (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h2 className="text-xl font-semibold text-white mb-2">Public Profile</h2>
-                    <p className="text-gray-400 text-sm mb-6">Manage how you appear to others on the platform.</p>
-                    
-                    {profileMessage && (
-                      <div className={`p-4 rounded-xl mb-6 flex items-center space-x-3 ${profileMessage.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-                        {profileMessage.type === "success" ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-                        <span className="text-sm font-medium">{profileMessage.text}</span>
-                      </div>
-                    )}
-
-                    <form onSubmit={handleProfileSubmit} className="space-y-5">
-                      <div>
-                        <label htmlFor="settings-name" className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
-                        <input 
-                          id="settings-name"
-                          type="text" 
-                          value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
-                          placeholder="Your full name"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="settings-email" className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
-                        <input 
-                          id="settings-email"
-                          type="email" 
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
-                          placeholder="you@example.com"
-                          required
-                        />
-                      </div>
-                      
-                      <div className="pt-4 flex justify-end">
-                        <button 
-                          type="submit" 
-                          disabled={profileLoading}
-                          className="px-6 py-3 bg-white text-black font-medium rounded-xl hover:bg-gray-200 transition-colors flex items-center space-x-2 disabled:opacity-50"
-                        >
-                          {profileLoading ? <Loader2 size={18} className="animate-spin" /> : null}
-                          <span>Save Changes</span>
-                        </button>
-                      </div>
-                    </form>
+            {activeTab === "profile" ? (
+              <div>
+                <h2 className="text-2xl font-bold mb-6">Profile Information</h2>
+                <form onSubmit={handleProfileUpdate} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">Full Name</label>
+                    <input 
+                      type="text" 
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full bg-background/60 border border-border rounded-md px-4 py-2.5 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                    />
                   </div>
-                )}
-
-                {activeTab === "security" && (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h2 className="text-xl font-semibold text-white mb-2">Security Settings</h2>
-                    <p className="text-gray-400 text-sm mb-6">Update your password and secure your account.</p>
-                    
-                    {securityMessage && (
-                      <div className={`p-4 rounded-xl mb-6 flex items-center space-x-3 ${securityMessage.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-                        {securityMessage.type === "success" ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-                        <span className="text-sm font-medium">{securityMessage.text}</span>
-                      </div>
-                    )}
-
-                    <form onSubmit={handleSecuritySubmit} className="space-y-5">
-                      <div>
-                        <label htmlFor="settings-current-password" className="block text-sm font-medium text-gray-300 mb-2">Current Password</label>
-                        <input 
-                          id="settings-current-password"
-                          type="password" 
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
-                          placeholder="Enter current password"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="settings-new-password" className="block text-sm font-medium text-gray-300 mb-2">New Password</label>
-                        <input 
-                          id="settings-new-password"
-                          type="password" 
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
-                          placeholder="Enter new password"
-                          required
-                          minLength={8}
-                        />
-                      </div>
-                      
-                      <div className="pt-4 flex justify-end">
-                        <button 
-                          type="submit" 
-                          disabled={securityLoading}
-                          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors flex items-center space-x-2 disabled:opacity-50"
-                        >
-                          {securityLoading ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                          <span>Update Password</span>
-                        </button>
-                      </div>
-                    </form>
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-background/60 border border-border rounded-md px-4 py-2.5 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                    />
                   </div>
-                )}
-
-                {activeTab === "preferences" && (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h2 className="text-xl font-semibold text-white mb-2">Preferences</h2>
-                    <p className="text-gray-400 text-sm mb-6">Customize your platform experience.</p>
-                    
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div>
-                          <h3 className="text-white font-medium">Email Notifications</h3>
-                          <p className="text-gray-400 text-sm">Receive alerts when a memo is fully generated.</p>
-                        </div>
-                        <div className="w-12 h-6 bg-emerald-500 rounded-full relative cursor-pointer">
-                          <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div>
-                          <h3 className="text-white font-medium">Dark Mode</h3>
-                          <p className="text-gray-400 text-sm">You are currently using the default dark theme.</p>
-                        </div>
-                        <div className="w-12 h-6 bg-emerald-500 rounded-full relative cursor-pointer opacity-50 cursor-not-allowed">
-                          <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                        </div>
-                      </div>
+                  <div className="p-4 rounded-md border border-border bg-black/20 flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Account Tier</p>
+                      <p className="font-mono text-primary">{user?.tier || "FREE"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Credits</p>
+                      <p className="font-mono">{user?.credits ?? 0}</p>
                     </div>
                   </div>
-                )}
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="px-6 py-2.5 rounded-md bg-primary text-primary-foreground font-medium neon-glow disabled:opacity-50 disabled:shadow-none"
+                  >
+                    {loading ? "Saving..." : "Save Changes"}
+                  </button>
+                </form>
               </div>
-            </div>
-          </main>
+            ) : (
+              <div>
+                <h2 className="text-2xl font-bold mb-6">Security Settings</h2>
+                <form onSubmit={handlePasswordUpdate} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">Current Password</label>
+                    <input 
+                      type="password" 
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full bg-background/60 border border-border rounded-md px-4 py-2.5 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">New Password</label>
+                    <input 
+                      type="password" 
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full bg-background/60 border border-border rounded-md px-4 py-2.5 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                      required
+                    />
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="px-6 py-2.5 rounded-md bg-primary text-primary-foreground font-medium neon-glow disabled:opacity-50 disabled:shadow-none"
+                  >
+                    {loading ? "Updating..." : "Update Password"}
+                  </button>
+                </form>
+              </div>
+            )}
+          </motion.div>
         </div>
-      </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .radial-gradient-glow {
-          background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.15), transparent 70%);
-        }
-      `}} />
+      </div>
     </div>
   );
 }

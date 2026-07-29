@@ -1,19 +1,22 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
-import { AlertCircle, CheckCircle2, CircleDashed, Terminal, ArrowLeft, Share2, Printer, Code, Check, RefreshCcw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { API_URL } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  ArrowLeft, Terminal, CheckCircle2, CircleDashed, AlertCircle, 
+  RefreshCcw, Share2, Printer, Code, Check, Loader2 
+} from "lucide-react";
+import { Logo } from "@/components/site/Logo";
+import { useParams } from "next/navigation";
 
 interface Job {
   id: string;
   ticker: string;
   status: string;
-  error_message?: string | null;
+  error_message?: string;
+  created_at: string;
 }
 
 interface LogEntry {
@@ -22,7 +25,7 @@ interface LogEntry {
   status: string;
   summary: string;
   timestamp: string;
-  duration_seconds: number | null;
+  duration_seconds: number;
 }
 
 interface LogsResponse {
@@ -31,332 +34,271 @@ interface LogsResponse {
   total_stages: number;
 }
 
-interface MemoCertificate {
-  metrics?: {
-    data_points_verified?: number;
-  };
-}
-
 interface Memo {
   html: string;
-  certificate: MemoCertificate | null;
+  certificate?: string;
 }
 
-import { Meteors } from "@/components/ui-effects/meteors";
-import { BorderBeam } from "@/components/ui-effects/border-beam";
-
-export default function JobPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(params);
+export default function JobPage() {
+  const params = useParams();
+  const id = params.id as string;
+  
   const [job, setJob] = useState<Job | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [progress, setProgress] = useState(0);
   const [memo, setMemo] = useState<Memo | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
+  
+  const [isCopied, setIsCopied] = useState(false);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: number | undefined;
-
-    const poll = async () => {
-      let shouldPollAgain = true;
-      try {
-        const statusRes = await fetch(`${API_URL}/jobs/${encodeURIComponent(id)}`, { credentials: "include", signal: controller.signal });
-        if (!statusRes.ok) throw new Error(statusRes.status === 404 ? "This analysis could not be found." : "Unable to load analysis status.");
-        const statusData = await statusRes.json() as Job;
-        setJob(statusData);
-        setLoadError(null);
-
-        const logsRes = await fetch(`${API_URL}/jobs/${encodeURIComponent(id)}/logs`, { credentials: "include", signal: controller.signal });
-        if (logsRes.ok) {
-          const logsData = await logsRes.json() as LogsResponse;
-          setLogs(logsData.logs);
-          setProgress(statusData.status === "COMPLETED" ? 100 : logsData.progress);
-        }
-
-        if (statusData.status === "FAILED") {
-          shouldPollAgain = false;
-          return;
-        }
-        if (statusData.status === "COMPLETED") {
-          const memoRes = await fetch(`${API_URL}/jobs/${encodeURIComponent(id)}/memo`, { credentials: "include", signal: controller.signal });
-          if (memoRes.ok) {
-            setMemo(await memoRes.json() as Memo);
-            shouldPollAgain = false;
-            return;
+  const fetchJobData = useCallback(async () => {
+    try {
+      const jobRes = await fetch(`${API_URL}/jobs/${id}`, { credentials: "include" });
+      if (jobRes.ok) {
+        const jobData = await jobRes.json();
+        setJob(jobData);
+        
+        if (jobData.status !== "FAILED") {
+          const logsRes = await fetch(`${API_URL}/jobs/${id}/logs`, { credentials: "include" });
+          if (logsRes.ok) {
+            const logsData: LogsResponse = await logsRes.json();
+            setLogs(logsData.logs || []);
+            setProgress(logsData.progress || 0);
           }
-          throw new Error("Your report is finishing up. Retrying automatically…");
         }
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        setLoadError(err instanceof Error ? err.message : "A connection error occurred.");
-      } finally {
-        if (!controller.signal.aborted && shouldPollAgain) {
-          timer = window.setTimeout(poll, 2500);
+        
+        if (jobData.status === "COMPLETED" && !memo) {
+          const memoRes = await fetch(`${API_URL}/jobs/${id}/memo`, { credentials: "include" });
+          if (memoRes.ok) {
+            const memoData = await memoRes.json();
+            setMemo(memoData);
+          }
         }
       }
-    };
+    } catch (err) {
+      console.error("Failed to fetch job data", err);
+    }
+  }, [id, memo]);
 
-    void poll();
+  useEffect(() => {
+    fetchJobData();
+    
+    let interval: NodeJS.Timeout;
+    if (job?.status !== "COMPLETED" && job?.status !== "FAILED") {
+      interval = setInterval(fetchJobData, 2500);
+    }
+    
+    return () => clearInterval(interval);
+  }, [job?.status, fetchJobData]);
 
-    return () => {
-      controller.abort();
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [id, memo, retryKey]);
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs]);
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleDownloadHtml = () => {
+    if (!memo?.html) return;
+    const blob = new Blob([memo.html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${job?.ticker || "memo"}-diligence.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = () => {
+    window.location.assign(`${API_URL}/jobs/${id}/pdf`);
+  };
 
   if (!job) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 px-6 text-center text-white">
-        <p className="font-mono">{loadError || "Initializing analysis workspace…"}</p>
-        {loadError && <Button type="button" onClick={() => setRetryKey((value) => value + 1)} variant="outline">Try again</Button>}
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     );
   }
 
-  return (
-    <div className="relative min-h-screen bg-slate-950 text-white selection:bg-indigo-500/30 overflow-x-hidden">
-      <Meteors number={30} className="z-0 opacity-80" />
-      <div className="absolute inset-0 bg-slate-950/80 z-0"></div>
+  const isCompleted = job.status === "COMPLETED" && memo;
+  const isFailed = job.status === "FAILED";
 
-      {/* Top Navbar */}
-      <nav className="relative z-50 border-b border-white/5 bg-slate-950/50 backdrop-blur-xl sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] text-foreground flex flex-col">
+      {/* Top Nav */}
+      <header className="glass border-b border-white/5 sticky top-0 z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Return to new analysis" className="inline-flex size-8 items-center justify-center rounded-lg hover:bg-white/10">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="font-semibold text-lg flex items-center gap-2">
-              <span className="text-zinc-400">DeligenX</span>
-              <span className="text-zinc-600">/</span>
-              <span className="text-blue-400">{job.ticker}</span>
+            <div className="w-px h-6 bg-white/10" />
+            <div className="scale-75 origin-left">
+              <Logo />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider ${
-              job.status === "COMPLETED" ? "bg-emerald-500/20 text-emerald-400" :
-              job.status === "FAILED" ? "bg-red-500/20 text-red-400" :
-              "bg-blue-500/20 text-blue-400 animate-pulse"
+          
+          <div className="flex items-center gap-4">
+            <span className="font-mono text-xl font-bold text-white tracking-widest">{job.ticker}</span>
+            <div className={`px-3 py-1 rounded-full border text-xs font-mono font-medium flex items-center gap-2 ${
+              isCompleted ? "bg-primary/10 border-primary/30 text-primary" : 
+              isFailed ? "bg-risk/10 border-risk/30 text-risk" : 
+              "bg-blue-500/10 border-blue-500/30 text-blue-400"
             }`}>
+              {isCompleted && <CheckCircle2 className="w-3 h-3" />}
+              {isFailed && <AlertCircle className="w-3 h-3" />}
+              {!isCompleted && !isFailed && <CircleDashed className="w-3 h-3 animate-spin" />}
               {job.status}
             </div>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="p-4 md:p-8 max-w-7xl mx-auto">
-        <AnimatePresence mode="wait">
-          {job.status === "COMPLETED" && memo ? (
-            <BoardroomView key="boardroom" memo={memo} ticker={job.ticker} jobId={job.id} />
-          ) : job.status === "FAILED" ? (
-            <FailureState key="failure" error={job.error_message} onRetry={() => setRetryKey((value) => value + 1)} />
-          ) : (
-            <LiveConsole key="console" logs={logs} ticker={job.ticker} progress={progress} error={loadError} onRetry={() => setRetryKey((value) => value + 1)} />
-          )}
-        </AnimatePresence>
-      </main>
-    </div>
-  );
-}
-
-function LiveConsole({ logs, ticker, progress, error, onRetry }: { logs: LogEntry[], ticker: string, progress: number, error: string | null, onRetry: () => void }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Auto scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [logs]);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 1.05 }}
-      className="max-w-4xl mx-auto mt-10"
-    >
-      <div className="mb-8 text-center">
-        <h2 className="text-3xl font-bold mb-4">Generating Due Diligence for {ticker}</h2>
-        <div className="max-w-md mx-auto">
-          <div className="flex justify-between text-sm text-zinc-400 mb-2">
-            <span>Synthesizing multi-agent pipeline...</span>
-            <span>{progress}%</span>
-          </div>
-          <Progress value={progress} className="h-2 bg-white/10" />
-        </div>
-      </div>
-
-      {error && (
-        <div role="alert" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-          <span>{error}</span>
-          <Button type="button" variant="outline" onClick={onRetry} className="shrink-0 border-amber-300/30 bg-transparent text-amber-50">
-            <RefreshCcw className="mr-2 size-4" /> Retry now
-          </Button>
-        </div>
-      )}
-
-      {/* Terminal Window */}
-      <Card className="relative bg-black/80 border-white/10 shadow-2xl rounded-xl overflow-hidden backdrop-blur-xl">
-        <BorderBeam size={200} duration={12} colorFrom="#10b981" colorTo="#3b82f6" />
-        <div className="relative z-10 flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/5">
-          <Terminal className="w-4 h-4 text-zinc-400" />
-          <span className="text-xs font-mono text-zinc-400">agent-audit.log</span>
-        </div>
-        <div ref={scrollRef} className="relative z-10 h-[500px] w-full overflow-y-auto rounded-b-xl p-4 font-mono text-sm" aria-live="polite">
-          {logs.length === 0 && (
-            <div className="text-zinc-500 italic">Waiting for agents to initialize...</div>
-          )}
-          {logs.map((log, i) => (
-            <motion.div 
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              key={i} 
-              className={`mb-2 flex items-start gap-3 ${log.status === "COMPLETED" ? "text-emerald-400" : "text-blue-400"}`}
+      <main className="flex-1 flex overflow-hidden">
+        {isFailed ? (
+          <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center text-center">
+            <div className="w-24 h-24 bg-risk/10 text-risk rounded-full flex items-center justify-center mb-6">
+              <AlertCircle className="w-12 h-12" />
+            </div>
+            <h2 className="text-3xl font-bold mb-4">Analysis Failed</h2>
+            <p className="text-muted-foreground max-w-md mb-8">
+              {job.error_message || "An unexpected error occurred during the analysis process."}
+            </p>
+            <Link 
+              href="/dashboard"
+              className="bg-primary text-[#0a0a0a] px-8 py-3 rounded-xl font-bold flex items-center gap-2 neon-glow"
             >
-              <div className="mt-0.5 shrink-0">
-                {log.status === "COMPLETED" ? <CheckCircle2 className="w-4 h-4" /> : <CircleDashed className="w-4 h-4 animate-spin" />}
-              </div>
-              <div>
-                <span className="text-zinc-500 mr-2">[{log.timestamp.split('T')[1].split('.')[0]}]</span>
-                <span className="font-semibold mr-2 opacity-80">[{log.agent}]</span>
-                <span className="text-zinc-300">{log.summary}</span>
-                {log.duration_seconds && (
-                  <span className="text-zinc-500 ml-2 text-xs">({log.duration_seconds}s)</span>
+              <RefreshCcw className="w-5 h-5" />
+              Try Again
+            </Link>
+          </div>
+        ) : isCompleted ? (
+          <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden">
+            {/* Boardroom Left Sidebar */}
+            <div className="w-full md:w-80 glass border-r border-white/5 p-6 flex flex-col shrink-0 overflow-y-auto">
+              <h3 className="text-lg font-bold font-mono tracking-tight mb-6 text-white flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-primary" />
+                Boardroom Output
+              </h3>
+              
+              <div className="space-y-4 mb-8 flex-1">
+                <div className="glass p-4 rounded-xl border border-primary/20 bg-primary/5">
+                  <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Status</div>
+                  <div className="text-primary font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Finalized
+                  </div>
+                </div>
+                
+                <div className="glass p-4 rounded-xl border border-white/5">
+                  <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Target</div>
+                  <div className="text-white font-bold">{job.ticker}</div>
+                </div>
+                
+                {memo.certificate && (
+                  <div className="glass p-4 rounded-xl border border-white/5">
+                    <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Integrity Hash</div>
+                    <div className="text-white font-mono text-xs truncate" title={memo.certificate}>
+                      {memo.certificate}
+                    </div>
+                  </div>
                 )}
               </div>
-            </motion.div>
-          ))}
-        </div>
-      </Card>
-    </motion.div>
-  );
-}
-
-function FailureState({ error, onRetry }: { error?: string | null; onRetry: () => void }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto mt-16 max-w-xl rounded-2xl border border-red-400/20 bg-red-500/10 p-8 text-center">
-      <AlertCircle className="mx-auto mb-4 size-10 text-red-300" />
-      <h2 className="text-2xl font-bold">Analysis could not be completed</h2>
-      <p className="mt-3 text-sm leading-6 text-zinc-300">{error || "The pipeline encountered an unexpected error. Your credit is safe if no report was generated."}</p>
-      <Button type="button" onClick={onRetry} className="mt-6 bg-white text-black hover:bg-zinc-200">
-        <RefreshCcw className="mr-2 size-4" /> Check status again
-      </Button>
-    </motion.div>
-  );
-}
-
-function BoardroomView({ memo, ticker, jobId }: { memo: Memo, ticker: string, jobId: string }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
-
-  const handleCopyLink = () => {
-    void navigator.clipboard.writeText(window.location.href)
-      .then(() => triggerToast("Shareable link copied to clipboard!"))
-      .catch(() => triggerToast("Could not copy the link. Please copy it from your browser."));
-  };
-
-  const handlePrintPDF = () => {
-    triggerToast("Generating HD PDF on Server... This may take a few seconds.");
-    
-    window.location.assign(`${API_URL}/jobs/${encodeURIComponent(jobId)}/pdf`);
-  };
-
-  const handleDownloadHTML = () => {
-    const blob = new Blob([memo.html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${ticker}_Investment_Memo.html`;
-    a.click();
-    triggerToast("Raw HTML report downloaded!");
-  };
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="grid grid-cols-1 lg:grid-cols-4 gap-6 relative z-10"
-    >
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {showToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-white/10 shadow-2xl rounded-full px-6 py-3 text-sm font-medium text-white"
-          >
-            <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
-              <Check className="w-4 h-4 text-emerald-400" />
-            </div>
-            {toastMessage}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Left Column: Certifications & Actions */}
-      <div className="lg:col-span-1 space-y-6">
-        <Card className="relative bg-black/60 border-emerald-500/30 backdrop-blur-xl shadow-[0_0_30px_-5px_rgba(16,185,129,0.2)] p-6 overflow-hidden">
-          <BorderBeam size={150} duration={10} colorFrom="#10b981" colorTo="#047857" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-6">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-              <h3 className="text-lg font-bold text-white drop-shadow-md">Data Integrity</h3>
+              
+              <div className="space-y-3">
+                <button 
+                  onClick={handleDownloadPdf}
+                  className="w-full glass border border-primary/30 hover:border-primary text-primary px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-sm"
+                >
+                  <Printer className="w-4 h-4" /> Download PDF
+                </button>
+                <button 
+                  onClick={handleDownloadHtml}
+                  className="w-full glass border border-white/10 hover:border-white/30 text-white px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-sm"
+                >
+                  <Code className="w-4 h-4" /> Export HTML
+                </button>
+                <button 
+                  onClick={handleShare}
+                  className="w-full glass border border-white/10 hover:border-white/30 text-white px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-sm"
+                >
+                  {isCopied ? <Check className="w-4 h-4 text-primary" /> : <Share2 className="w-4 h-4" />}
+                  {isCopied ? "Copied!" : "Share Link"}
+                </button>
+              </div>
             </div>
             
-            <div className="space-y-4 text-sm mb-8">
-              <div className="flex justify-between border-b border-white/10 pb-2">
-                <span className="text-zinc-400">Points Verified</span>
-                <span className="font-mono text-emerald-400">{memo.certificate?.metrics?.data_points_verified || 220}</span>
-              </div>
-              <div className="flex justify-between border-b border-white/10 pb-2">
-                <span className="text-zinc-400">Cross Checks</span>
-                <span className="font-mono text-emerald-400">Passed</span>
-              </div>
-              <div className="flex justify-between border-b border-white/10 pb-2">
-                <span className="text-zinc-400">Confidence</span>
-                <span className="font-mono text-emerald-400">100%</span>
-              </div>
-            </div>
-
-            {/* Export & Share Actions */}
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Export & Share</div>
-              
-              <Button onClick={handlePrintPDF} className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 justify-start transition-all">
-                <Printer className="w-4 h-4 mr-3" /> Export as PDF
-              </Button>
-              
-              <Button onClick={handleCopyLink} className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 justify-start transition-all">
-                <Share2 className="w-4 h-4 mr-3" /> Copy Share Link
-              </Button>
-
-              <Button onClick={handleDownloadHTML} variant="ghost" className="w-full text-zinc-400 hover:text-white justify-start">
-                <Code className="w-4 h-4 mr-3" /> Download Raw HTML
-              </Button>
+            {/* Right Iframe */}
+            <div className="flex-1 bg-white relative overflow-hidden">
+              <iframe 
+                srcDoc={memo.html} 
+                className="w-full h-full border-none absolute inset-0"
+                title="Diligence Memo"
+              />
             </div>
           </div>
-        </Card>
-      </div>
-
-      {/* Right Column: HTML Render */}
-      <div className="lg:col-span-3">
-        <Card className="bg-white border-none shadow-2xl rounded-xl overflow-hidden min-h-[800px] relative">
-          <iframe 
-            ref={iframeRef}
-            srcDoc={memo.html} 
-            className="w-full h-[85vh] bg-white border-0"
-            title={`${ticker} investment memo`}
-            sandbox="allow-scripts allow-modals"
-          />
-        </Card>
-      </div>
-    </motion.div>
+        ) : (
+          <div className="container mx-auto px-4 py-8 flex flex-col h-full max-w-5xl">
+            {/* Live Console */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-mono text-muted-foreground">Analysis Progress</span>
+                <span className="text-sm font-mono text-primary">{Math.round(progress)}%</span>
+              </div>
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full bg-primary"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex-1 glass border border-primary/20 rounded-xl overflow-hidden flex flex-col relative shadow-[0_0_30px_rgba(57,255,136,0.1)]">
+              <div className="bg-black/50 border-b border-white/5 px-4 py-3 flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-primary" />
+                <span className="font-mono text-xs text-white">live-console.sh</span>
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse ml-2" />
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 font-mono text-xs sm:text-sm space-y-2">
+                <AnimatePresence initial={false}>
+                  {logs.map((log, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex items-start gap-3 border-l-2 pl-3 py-1"
+                      style={{ 
+                        borderColor: log.status === "COMPLETED" ? "#39ff88" : 
+                                    log.status === "RUNNING" ? "#3b82f6" : "#4b5563"
+                      }}
+                    >
+                      <span className="text-muted-foreground shrink-0 w-20">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}
+                      </span>
+                      <span className="text-purple-400 shrink-0 w-24">[{log.agent}]</span>
+                      <span className="text-gray-300 flex-1">{log.summary}</span>
+                      {log.duration_seconds > 0 && (
+                        <span className="text-muted-foreground shrink-0 text-right">
+                          {log.duration_seconds.toFixed(1)}s
+                        </span>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                <div ref={logsEndRef} className="h-4" />
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

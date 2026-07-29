@@ -7,9 +7,6 @@ export interface User {
   credits?: number;
 }
 
-// Keep browser calls same-origin in production. Nginx routes /api to FastAPI, while
-// next.config.ts rewrites the same path to the local backend during development.
+// In production, next.config.ts rewrites /api/v1/* to the backend.
+// This keeps browser calls same-origin, avoiding CORS issues.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-
-// For server-side fetching, we need to manually pass the cookie.
-// But for client-side fetching, credentials: 'include' handles it.

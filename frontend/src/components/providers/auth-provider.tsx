@@ -39,8 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [refreshUser]);
 
+  // Redirect away from protected routes when unauthenticated
   useEffect(() => {
-    const protectedRoute = ["/history", "/job", "/settings", "/admin"].some(
+    const protectedRoute = ["/dashboard", "/history", "/job", "/settings", "/admin"].some(
       (route) => pathname === route || pathname.startsWith(`${route}/`),
     );
 
@@ -53,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiRequest("/auth/logout", { method: "POST" });
     } catch (e) {
-      console.error("Logout request failed (backend might be down):", e);
+      console.error("Logout request failed:", e);
     } finally {
       setUser(null);
       router.replace("/login");

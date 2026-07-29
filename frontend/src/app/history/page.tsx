@@ -1,38 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Meteors } from "@/components/ui-effects/meteors";
+import { motion } from "framer-motion";
 import { API_URL } from "@/lib/auth";
 import Link from "next/link";
+import { FileText, Loader2, ArrowRight } from "lucide-react";
 
 interface Job {
   id: string;
   ticker: string;
-  status: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
   created_at: string;
 }
 
 export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function fetchJobs() {
       try {
         const res = await fetch(`${API_URL}/jobs`, { credentials: "include" });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            setJobs(data);
-          } else {
-            setJobs([]);
-          }
-        } else {
-          setJobs([]);
-        }
-      } catch (err) {
-        console.error("Failed to fetch jobs", err);
-        setJobs([]);
+        if (!res.ok) throw new Error("Failed to fetch jobs");
+        const data = await res.json();
+        setJobs(data);
+      } catch (err: any) {
+        setError(err.message || "An error occurred");
       } finally {
         setLoading(false);
       }
@@ -43,84 +37,89 @@ export default function HistoryPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "COMPLETED":
-        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+        return "text-primary border-primary/50 bg-primary/10";
       case "FAILED":
-        return "bg-red-500/10 text-red-400 border-red-500/20";
+        return "text-[#ff5c5c] border-[#ff5c5c]/50 bg-[#ff5c5c]/10";
       case "RUNNING":
-        return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+        return "text-blue-400 border-blue-400/50 bg-blue-400/10";
       default:
-        return "bg-gray-500/10 text-gray-400 border-gray-500/20";
+        return "text-muted-foreground border-muted-foreground/50 bg-muted/10";
     }
   };
 
   return (
-    <div className="min-h-screen bg-black relative flex flex-col items-center py-20 px-4">
-      {/* Dynamic Backgrounds */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <Meteors number={15} />
-      </div>
+    <div className="min-h-screen bg-[#0a0a0a] text-foreground p-6 md:p-12 relative overflow-hidden">
+      {/* Background Glow */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
+      
+      <div className="max-w-5xl mx-auto relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <h1 className="text-4xl font-bold mb-2">Analysis <span className="text-gradient-neon">History</span></h1>
+          <p className="text-muted-foreground">View your past due diligence reports and running tasks.</p>
+        </motion.div>
 
-      <div className="z-10 w-full max-w-5xl space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-neutral-50 to-neutral-400">
-            Analysis History
-          </h1>
-          <p className="text-neutral-400 text-lg">
-            View all your past AI investment memos and pipelines.
-          </p>
-        </div>
-
-        <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="glass rounded-xl p-6 border border-border"
+        >
           {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground font-mono">Loading history...</p>
             </div>
+          ) : error ? (
+            <div className="text-center py-10 text-[#ff5c5c]">{error}</div>
           ) : jobs.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-6xl mb-4">📭</div>
-              <h3 className="text-xl font-medium text-white mb-2">No History Found</h3>
-              <p className="text-neutral-400 mb-6">You haven&apos;t run any analysis jobs yet.</p>
-              <Link href="/" className="px-6 py-3 bg-white text-black font-semibold rounded-lg hover:bg-neutral-200 transition-colors">
-                Run New Analysis
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 border border-primary/20">
+                <FileText className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">No analyses yet</h3>
+              <p className="text-muted-foreground mb-6 max-w-md">You haven't run any due diligence reports. Start an analysis from the dashboard.</p>
+              <Link href="/dashboard" className="px-6 py-2 rounded-md bg-primary text-primary-foreground font-medium neon-glow inline-flex items-center gap-2">
+                Go to Dashboard <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/10 text-neutral-400 text-sm uppercase tracking-wider">
-                    <th className="py-4 px-6 font-medium">Ticker</th>
-                    <th className="py-4 px-6 font-medium">Job ID</th>
-                    <th className="py-4 px-6 font-medium">Date</th>
-                    <th className="py-4 px-6 font-medium">Status</th>
-                    <th className="py-4 px-6 font-medium text-right">Action</th>
+                  <tr className="border-b border-border/50 text-muted-foreground text-sm font-medium">
+                    <th className="pb-4 pl-2">Ticker</th>
+                    <th className="pb-4">Job ID</th>
+                    <th className="pb-4">Date</th>
+                    <th className="pb-4">Status</th>
+                    <th className="pb-4 text-right pr-2">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-border/30">
                   {jobs.map((job) => (
-                    <tr key={job.id} className="group hover:bg-white/[0.02] transition-colors">
-                      <td className="py-4 px-6">
-                        <div className="font-bold text-lg text-white">{job.ticker}</div>
+                    <tr key={job.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-4 pl-2 font-bold">{job.ticker}</td>
+                      <td className="py-4 font-mono text-sm text-muted-foreground">{job.id.substring(0, 8)}...</td>
+                      <td className="py-4 text-sm text-muted-foreground">
+                        {new Date(job.created_at).toLocaleDateString()}
                       </td>
-                      <td className="py-4 px-6 text-sm text-neutral-500">
-                        {job.id}
-                      </td>
-                      <td className="py-4 px-6 text-sm text-neutral-400">
-                        {new Date(job.created_at).toLocaleString()}
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(job.status)}`}>
+                      <td className="py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getStatusColor(job.status)}`}>
                           {job.status}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-right">
-                        <Link
-                          href={`/job/${job.id}`}
-                          className="inline-flex items-center space-x-2 text-sm text-neutral-300 hover:text-emerald-400 transition-colors group-hover:underline"
-                        >
-                          <span>View Report</span>
-                          <span>→</span>
-                        </Link>
+                      <td className="py-4 text-right pr-2">
+                        {job.status === "COMPLETED" ? (
+                          <Link href={`/report/${job.id}`} className="text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-1 text-sm font-medium">
+                            View Report <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground text-sm cursor-not-allowed">Pending...</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -128,7 +127,7 @@ export default function HistoryPage() {
               </table>
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );

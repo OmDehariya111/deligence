@@ -40,6 +40,15 @@ frontend/.vercel
 frontend/tsconfig.tsbuildinfo
 frontend/next-env.d.ts
 
+# ── New Frontend (build artifacts) ──────────────────────────
+new-frontend/node_modules/
+new-frontend/.next/
+new-frontend/.vercel
+new-frontend/next-env.d.ts
+
+# ── Old Frontend Backup ─────────────────────────────────────
+frontend-old/
+
 # ── Docker Volumes & Runtime ────────────────────────────────
 data/certbot/
 postgres_data/

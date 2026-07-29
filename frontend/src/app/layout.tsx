@@ -1,31 +1,36 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import AppShell from "@/components/layout/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://deligenx.ai"),
+  metadataBase: new URL("https://deligenx.vercel.app"),
   title: {
-    default: "DeligenX | No.1 AI Due Diligence Platform",
+    default: "DeligenX — Autonomous AI Financial Due Diligence",
     template: "%s | DeligenX",
   },
-  description: "Automate financial research, risk assessment, and market intelligence with DeligenX AI. The most advanced due diligence platform for professionals.",
-  keywords: ["AI Due Diligence", "Financial Analysis", "Automated Research", "DeligenX", "Investment Intelligence"],
-  alternates: { canonical: "/" },
+  description:
+    "DeligenX turns any US public ticker into an institutional-grade investment memorandum in minutes — autonomous 5-agent AI pipeline, SEC-cited, zero human intervention.",
+  keywords: [
+    "AI Due Diligence",
+    "Financial Analysis",
+    "Investment Memo",
+    "SEC Filings",
+    "Risk Assessment",
+    "DeligenX",
+  ],
+  authors: [{ name: "DeligenX" }],
   openGraph: {
-    title: "DeligenX | No.1 AI Due Diligence Platform",
-    description: "Automate financial research, risk assessment, and market intelligence with DeligenX AI.",
-    url: "https://deligenx.ai",
-    siteName: "DeligenX",
-    locale: "en_US",
+    title: "DeligenX — Autonomous AI Financial Due Diligence",
+    description:
+      "Institutional-grade investment memos in minutes, not weeks. Autonomous multi-agent AI, SEC filings, deterministic risk models.",
     type: "website",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "DeligenX AI due diligence platform" }],
+    siteName: "DeligenX",
   },
   twitter: {
     card: "summary_large_image",
-    title: "DeligenX | AI Due Diligence",
-    description: "Automate financial research and risk assessment.",
-    images: ["/opengraph-image"],
+    title: "DeligenX — AI Due Diligence",
+    description:
+      "Automate financial research and risk assessment with a 5-agent AI pipeline.",
   },
 };
 
@@ -35,13 +40,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body
-        className="antialiased min-h-screen bg-background text-foreground"
-      >
-        <AuthProvider>
-          <AppShell>{children}</AppShell>
-        </AuthProvider>
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        />
+      </head>
+      <body className="antialiased min-h-screen bg-background text-foreground">
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
