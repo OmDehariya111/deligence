@@ -167,6 +167,17 @@ def _wrap_chart(canvas_id: str, config: dict, title: str = "", height: str = "40
                 if (abs >= 1e3) return '$' + (value/1e3).toFixed(0) + 'K';
                 return '$' + value.toFixed(0);
             };
+            // Also format y2 axis if it exists (combo charts with dual Y-axes)
+            if (chart.options.scales.y2) {
+                chart.options.scales.y2.ticks.callback = function(value) {
+                    var abs = Math.abs(value);
+                    if (abs >= 1e12) return '$' + (value/1e12).toFixed(1) + 'T';
+                    if (abs >= 1e9) return '$' + (value/1e9).toFixed(1) + 'B';
+                    if (abs >= 1e6) return '$' + (value/1e6).toFixed(0) + 'M';
+                    if (abs >= 1e3) return '$' + (value/1e3).toFixed(0) + 'K';
+                    return '$' + value.toFixed(0);
+                };
+            }
             chart.options.plugins.tooltip.callbacks = chart.options.plugins.tooltip.callbacks || {};
             chart.options.plugins.tooltip.callbacks.label = function(ctx) {
                 var v = ctx.parsed.y != null ? ctx.parsed.y : ctx.parsed.x;

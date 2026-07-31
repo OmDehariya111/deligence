@@ -227,7 +227,7 @@ export function SampleReport() {
             href="/demo"
             className="group inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 font-sans text-sm font-semibold text-primary-foreground shadow-[0_0_40px_rgba(57,255,136,0.45)] transition-all duration-300 hover:shadow-[0_0_60px_rgba(57,255,136,0.7)] active:scale-[0.98]"
           >
-            Generate Your First Report
+            View Interactive Demo
             <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
           </Link>
         </motion.div>

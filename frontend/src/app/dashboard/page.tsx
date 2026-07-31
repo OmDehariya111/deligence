@@ -6,7 +6,8 @@ import { API_URL } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Search, ArrowRight, Loader2, UploadCloud, Zap, FileText, Clock, TrendingUp } from "lucide-react";
+import { Search, ArrowRight, Loader2, UploadCloud, Zap, FileText, Clock, TrendingUp, ArrowLeft, Settings } from "lucide-react";
+import { Logo } from "@/components/site/Logo";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -116,6 +117,28 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-foreground relative overflow-hidden">
+      <header className="sticky top-0 z-50 glass border-b border-white/5 py-4">
+        <div className="container max-w-5xl mx-auto px-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-muted-foreground hover:text-white transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="w-px h-6 bg-white/10" />
+            <Link href="/" className="hover:opacity-80 transition-opacity">
+              <Logo />
+            </Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium text-muted-foreground hidden sm:inline-block">
+              {user?.full_name || "User"}
+            </span>
+            <Link href="/settings" className="text-muted-foreground hover:text-primary transition-colors">
+              <Settings className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
+      </header>
+
       {/* Radial glow background */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/20 blur-[120px] rounded-full pointer-events-none" />
       

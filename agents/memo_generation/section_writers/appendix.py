@@ -130,9 +130,7 @@ class Section17Writer:
                 <p><strong>Report Generated:</strong> {timestamp}</p>
                 <p><strong>Platform:</strong> DeligenX AI-Powered Due Diligence</p>
                 <p><strong>Pipeline:</strong> 5-Agent Sequential (Ingestion → Analysis → Market Intelligence → Risk Assessment → Memo Generation)</p>
-                <p><strong>Ingestion Duration:</strong> {self.data.get('ingestion_duration', 'N/A')}s</p>
                 <p><strong>Data Source:</strong> SEC EDGAR (XBRL CompanyFacts, Filing Documents), Yahoo Finance (Market Data), NewsAPI (Sentiment), FRED (Macro Indicators)</p>
-                <p><strong>LLM Models:</strong> Google Gemini 2.5 Pro (narratives), Gemini 2.5 Flash (extraction)</p>
             </div>
         </div>
         """
@@ -312,13 +310,19 @@ class Section17Writer:
         <p class="text-mono text-small" style="background:#F1F5F9; padding:12px; border-radius:8px;">
             M = −4.840 + 0.920×DSRI + 0.528×GMI + 0.404×AQI + 0.892×SGI + 0.115×DEPI − 0.172×SGAI + 4.679×TATA − 0.327×LVGI
         </p>
-        <p><strong>Thresholds:</strong> M > −1.78 = LIKELY MANIPULATOR | −2.22 ≤ M ≤ −1.78 = GREY ZONE | M < −2.22 = UNLIKELY MANIPULATOR</p>
+        <p><strong>Tiered Thresholds (Beneish 1999, 8-variable model):</strong><br>
+        M &gt; −1.78 = <strong>LIKELY MANIPULATOR</strong> (high-risk threshold — fewer false negatives) |
+        −2.22 &lt; M ≤ −1.78 = <strong>GREY ZONE</strong> (ambiguous — qualitative review required) |
+        M ≤ −2.22 = <strong>UNLIKELY MANIPULATOR</strong> (primary safe threshold)</p>
+        <p class="text-small text-secondary"><strong>Important:</strong> The SGI threshold (1.607) is the mean SGI of manipulators in Beneish's original 1999 sample — not an absolute fraud cutoff. Hypergrowth companies with high SGI but negative TATA (CFO &gt; Net Income) represent a known false-positive pattern. Always cross-reference TATA (Total Accruals to Total Assets) as the strongest individual manipulation signal.</p>
 
         <h4>Altman Z-Score (Bankruptcy Risk)</h4>
         <p class="text-mono text-small" style="background:#F1F5F9; padding:12px; border-radius:8px;">
             Z'' = 6.56×(Working Capital/Assets) + 3.26×(Retained Earnings/Assets) + 6.72×(EBIT/Assets) + 1.05×(Market Cap/Liabilities)
         </p>
-        <p><strong>Thresholds (Non-Mfg):</strong> Z'' > 2.60 = SAFE | 1.10 ≤ Z'' ≤ 2.60 = GREY | Z'' < 1.10 = DISTRESS</p>
+        <p><strong>Thresholds (Non-Mfg Z'' model):</strong> Z'' &gt; 2.60 = SAFE | 1.10 ≤ Z'' ≤ 2.60 = GREY | Z'' &lt; 1.10 = DISTRESS<br>
+        <strong>Thresholds (Manufacturing Z model):</strong> Z &gt; 2.99 = SAFE | 1.81 ≤ Z ≤ 2.99 = GREY | Z &lt; 1.81 = DISTRESS<br>
+        <strong>Note:</strong> Altman Z-Score is NOT applicable to financial-sector companies (SIC 6000–6799) as leverage is a structural feature of their business model.</p>
         """
 
     def _build_glossary(self) -> str:

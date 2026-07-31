@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://deligenx.vercel.app"),
   title: {
-    default: "DeligenX — Autonomous AI Financial Due Diligence",
+    default: "DeligenX - An AI Powered Due Deligence Platform",
     template: "%s | DeligenX",
   },
   description:
@@ -19,6 +19,11 @@ export const metadata: Metadata = {
     "DeligenX",
   ],
   authors: [{ name: "DeligenX" }],
+  icons: {
+    icon: [
+      { url: '/icon.svg?v=2', type: 'image/svg+xml' },
+    ],
+  },
   openGraph: {
     title: "DeligenX — Autonomous AI Financial Due Diligence",
     description:

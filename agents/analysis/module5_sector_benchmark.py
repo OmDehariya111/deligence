@@ -1,157 +1,261 @@
 import json
 import logging
+import os
 from typing import Any
 from pathlib import Path
+
+from litellm import completion
 
 from schemas.pydantic_models import (
     BenchmarkOutput, BenchmarkMetric, PeerInfo, RatioRecord
 )
-
-# Ye script ek external SEC EDGAR aur Market Data MCP server ko call karti hai external data lane ke liye
 from utils.mcp_client import call_mcp_tool_sync
+from utils.llm_utils import parse_llm_json_response
 
 logger = logging.getLogger(__name__)
 
 class SectorBenchmarkEngine:
     def __init__(self, ticker: str, sic_code: str, industry: str, benchmark_year: int, target_ratios: list[RatioRecord]):
-        # Yahan hum target company (jaise MSFT) ki details aur uske Module 1 se nikle hue apne ratios (target_ratios) store karte hain
+        # Target company ki details aur uske Module 1 se nikle hue ratios store karte hain
         self.ticker = ticker.upper().strip()
         self.sic_code = sic_code.strip()
         self.industry = industry
         self.benchmark_year = benchmark_year
         self.target_ratios = {r.ratio_name: r for r in target_ratios if r.fiscal_year == benchmark_year}
         
+    def _identify_peers_via_llm(self, company_name: str) -> list[str]:
+        """LLM se real-world sector peers identify karna.
+        
+        Returns:
+            List of company names (e.g. ["Microsoft Corp", "Alphabet Inc"])
+        """
+        model_name = os.environ.get("LLM_MODEL_NAME_TIER1", "vertex_ai/gemini-2.5-flash")
+        
+        prompt = (
+            f"You are a financial analyst performing sector benchmarking. "
+            f"For the company {self.ticker} ({company_name}) which operates in SIC industry code {self.sic_code} ({self.industry}), "
+            f"identify the top 10 publicly-traded US peer companies that would appear in an institutional-grade sector benchmark comparison. "
+            f"These should be companies that:\n"
+            f"1. Are registered with the US SEC (have CIK numbers)\n"
+            f"2. Operate in the same or closely related industry segments\n"
+            f"3. Are comparable in terms of business model and market positioning\n"
+            f"4. File annual reports (10-K) with the SEC\n\n"
+            f"Use the EXACT legal names as registered with the SEC (e.g. 'MICROSOFT CORP' not 'Microsoft').\n"
+            f"Do NOT include {self.ticker} ({company_name}) itself.\n\n"
+            f"Return ONLY a valid JSON array of strings. Example: [\"MICROSOFT CORP\", \"ALPHABET INC\"]\n"
+            f"No markdown formatting, no explanations."
+        )
+        
+        try:
+            response = completion(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_text = response.choices[0].message.content
+            names = parse_llm_json_response(raw_text, default=[])
+            if isinstance(names, list):
+                result = [n.strip() for n in names if isinstance(n, str) and n.strip()]
+                logger.info(f"LLM identified {len(result)} peer companies: {result}")
+                return result
+            return []
+        except Exception as e:
+            logger.error(f"LLM peer identification failed: {e}")
+            return []
+    
+    def _resolve_names_to_ciks(self, names: list[str]) -> list[dict]:
+        """Company names ko SEC tickers/CIKs me resolve karna.
+        
+        Returns:
+            List of dicts with keys: ticker, cik, entity_name
+        """
+        if not names:
+            return []
+            
+        try:
+            tickers_data = call_mcp_tool_sync(
+                "mcp_servers/sec_edgar_server.py",
+                "get_company_tickers",
+                {},
+            )
+            if isinstance(tickers_data, str):
+                tickers_data = json.loads(tickers_data)
+        except Exception as e:
+            logger.error(f"Failed to fetch company tickers via MCP: {e}")
+            return []
+        
+        # Build lookup list
+        entity_lookup: list[tuple[str, str, str]] = []
+        if tickers_data:
+            for key, item in tickers_data.items():
+                if isinstance(item, dict):
+                    t = item.get("ticker")
+                    title = item.get("title")
+                    cik_val = item.get("cik_str")
+                    if t and title:
+                        cik_str = str(cik_val).zfill(10) if cik_val is not None else ""
+                        entity_lookup.append((t, title, cik_str))
+        
+        resolved = []
+        used_tickers = set()
+        
+        for name in names:
+            name_lower = name.lower().strip()
+            # Corporate suffixes hatake short form banao
+            import re
+            short_name = re.sub(r",?\s*\b(Inc\.?|Corp\.?|Corporation|LLC|PLC|Ltd\.?)\s*$", "", name, flags=re.IGNORECASE).strip().lower()
+            
+            best_match = None
+            
+            # Pass 1: Exact match
+            for ticker_key, entity_name, cik_str in entity_lookup:
+                ent_lower = entity_name.lower()
+                tk_lower = ticker_key.lower()
+                if (ent_lower == name_lower or ent_lower == short_name or 
+                    tk_lower == name_lower or tk_lower == short_name):
+                    best_match = (ticker_key, entity_name, cik_str)
+                    break
+            
+            # Pass 2: Substring match
+            if not best_match:
+                for ticker_key, entity_name, cik_str in entity_lookup:
+                    ent_lower = entity_name.lower()
+                    if (name_lower in ent_lower or short_name in ent_lower or
+                        ent_lower in name_lower or ent_lower in short_name):
+                        best_match = (ticker_key, entity_name, cik_str)
+                        break
+            
+            if best_match and best_match[0].upper() != self.ticker and best_match[0] not in used_tickers:
+                resolved.append({
+                    "ticker": best_match[0],
+                    "entity_name": best_match[1],
+                    "cik": best_match[2],
+                })
+                used_tickers.add(best_match[0])
+        
+        logger.info(f"Resolved {len(resolved)}/{len(names)} peer names to SEC tickers.")
+        return resolved
+        
     def run(self) -> dict[str, Any]:
         """Run sector benchmarking."""
-        # Ye main function hai jo competitor dhoondne se lekar average nikalne tak sab karta hai
         logger.info(f"Running sector benchmarking for {self.ticker} in year {self.benchmark_year} under SIC {self.sic_code}")
         
-        # 1. Load SIC mapping using the correct get_sic_mapping tool
-        # Pehla step: SEC se saari companies ke SIC code (Industry code) ki dictionary (map) lana taaki hum competitors dhoond sakein
-        try:
-            tickers_resp = call_mcp_tool_sync("mcp_servers/sec_edgar_server.py", "get_sic_mapping", {})
-            if isinstance(tickers_resp, str):
-                tickers_resp = json.loads(tickers_resp)
-        except Exception as e:
-            logger.error(f"Failed to fetch SIC mapping: {e}")
-            tickers_resp = {}
-            
-        sic_mapping = tickers_resp.get("mapping", {})
+        # =====================================================================
+        # STEP 1: LLM-based peer identification (NEW - replaces SIC filtering)
+        # =====================================================================
+        # Pehle ingestion summary se company name lene ki koshish
+        company_name = self.industry or self.ticker
         
-        # 2. Fetch Revenues frame to identify peers
-        # Dusra step: Us saal ki sabhi companies ka Total Revenue lana. Hum competitors ko unke revenue size ke hisab se select karenge.
+        llm_peer_names = self._identify_peers_via_llm(company_name)
+        resolved_peers = self._resolve_names_to_ciks(llm_peer_names)
+        
+        if not resolved_peers:
+            logger.warning("LLM peer identification yielded no resolved peers. Returning PARTIAL status.")
+            return {"status": "PARTIAL", "peer_count": 0, "reason": "LLM peer identification yielded no SEC-resolved companies."}
+        
+        # =====================================================================
+        # STEP 2: Fetch Revenue data to get peer revenue for sorting/PeerInfo
+        # =====================================================================
+        # IMPORTANT: Different companies use different XBRL revenue tags.
+        # Semiconductors like Intel, AMD, Broadcom use RevenueFromContractWithCustomer*
+        # while others use Revenues or SalesRevenueNet.
+        # We try all common tags and merge the results to get maximum coverage.
+        REVENUE_TAGS = [
+            "Revenues",
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "RevenueFromContractWithCustomerIncludingAssessedTax",
+            "SalesRevenueNet",
+            "SalesRevenueGoodsNet",
+            "SalesRevenueServicesNet"
+        ]
+        
         target_year = self.benchmark_year
-        try:
-            rev_resp = call_mcp_tool_sync(
-                "mcp_servers/sec_edgar_server.py", 
-                "get_frames_data", 
-                {"tag": "Revenues", "unit": "USD", "period": f"CY{target_year}"}
-            )
-            if isinstance(rev_resp, str):
-                rev_resp = json.loads(rev_resp)
-        except Exception as e:
-            logger.error(f"Revenues frame query failed: {e}")
-            rev_resp = {"status": "FAILED", "error_message": str(e)}
-                
-        # If CY{target_year} fails (e.g. 404 because year is not complete), try target_year - 1
-        if rev_resp.get("status") != "OK":
-            logger.info(f"CY{target_year} Revenues frame not found, trying fallback to CY{target_year-1}")
-            target_year -= 1
-            try:
-                rev_resp = call_mcp_tool_sync(
-                    "mcp_servers/sec_edgar_server.py", 
-                    "get_frames_data", 
-                    {"tag": "Revenues", "unit": "USD", "period": f"CY{target_year}"}
-                )
-                if isinstance(rev_resp, str):
-                    rev_resp = json.loads(rev_resp)
-            except Exception as e:
-                logger.error(f"Fallback Revenues frame query failed: {e}")
-                rev_resp = {"status": "FAILED", "error_message": str(e)}
-
-        if rev_resp.get("status") != "OK":
-            return {"status": "FAILED", "reason": f"Could not fetch Revenues frame: {rev_resp.get('error_message')}"}
-            
-        # Update benchmark_year if we had to fallback so subsequent fetches use the same year
-        self.benchmark_year = target_year
-            
-        companies = rev_resp.get("data", [])
-        # Sort by revenue descending (Jiska revenue sabse zyada hai wo upar aayega)
-        companies.sort(key=lambda x: x.get("value", 0), reverse=True)
         
-        peers = []
-        fallback_count = 0
-        max_fallbacks = 15  # Limit to prevent excessive API calls (Sirf top companies pe hi extra check lagana)
+        # We need to find which year (target_year, target_year - 1, or target_year - 2) 
+        # has the most peer revenue data published.
+        year_coverage = {}
+        year_data = {}
         
-        # Har company ko check kar rahe hain ki wo hamari industry (SIC code) ki hai ya nahi
-        for comp in companies:
-            cik_str = str(comp["cik"]).zfill(10)
-            if cik_str == "0000000000": 
-                continue
-            
-            comp_sic = sic_mapping.get(cik_str)
-            
-            # Fallback for missing SIC in mapping
-            if not comp_sic and fallback_count < max_fallbacks:
+        for attempt_year in [target_year, target_year - 1, target_year - 2]:
+            rev_by_cik = {}
+            for tag in REVENUE_TAGS:
                 try:
-                    logger.info(f"CIK {cik_str} not in SIC mapping. Falling back to submissions resolution.")
-                    sub_resp = call_mcp_tool_sync(
-                        "mcp_servers/sec_edgar_server.py", 
-                        "get_company_submissions", 
-                        {"cik": cik_str}
+                    rev_resp = call_mcp_tool_sync(
+                        "mcp_servers/sec_edgar_server.py",
+                        "get_frames_data",
+                        {"tag": tag, "unit": "USD", "period": f"CY{attempt_year}"}
                     )
-                    if isinstance(sub_resp, str):
-                        sub_data = json.loads(sub_resp)
-                    else:
-                        sub_data = sub_resp
-                    
-                    if sub_data and "company_identity" in sub_data:
-                        comp_sic = sub_data["company_identity"].get("sic_code")
-                        if comp_sic:
-                            comp_sic = str(comp_sic).strip()
-                            sic_mapping[cik_str] = comp_sic
-                            fallback_count += 1
+                    if isinstance(rev_resp, str):
+                        rev_resp = json.loads(rev_resp)
+                    if rev_resp.get("status") == "OK":
+                        for comp in rev_resp.get("data", []):
+                            cik_str = str(comp["cik"]).zfill(10)
+                            if cik_str not in rev_by_cik:
+                                rev_by_cik[cik_str] = comp.get("value", 0)
                 except Exception as e:
-                    logger.warning(f"Failed fallback SIC lookup for CIK {cik_str}: {e}")
+                    logger.warning(f"Revenue tag '{tag}' CY{attempt_year} failed: {e}")
+                    continue
             
-            if comp_sic == self.sic_code and comp.get("entity_name", "").upper() != self.ticker:
-                peers.append(comp)
-                # Hum sirf top 20 competitors hi lenge warna API calls bahut zyada lag jayengi
-                if len(peers) >= 20:
-                    break
-                    
-        peer_ciks = {str(p["cik"]).zfill(10) for p in peers}
+            peer_hits = sum(1 for p in resolved_peers if p["cik"] in rev_by_cik)
+            year_coverage[attempt_year] = peer_hits
+            year_data[attempt_year] = rev_by_cik
+            
+        # Select the year with the highest peer coverage. If tie, prefer more recent.
+        best_year = max(year_coverage.keys(), key=lambda y: (year_coverage[y], y))
+        self.benchmark_year = best_year
+        revenue_by_cik = year_data[best_year]
         
-        if not peers:
-            return {"status": "PARTIAL", "peer_count": 0, "reason": "No peers found for this SIC code in the Frames data."}
+        logger.info(f"Selected CY{best_year} for benchmarking as it covers {year_coverage[best_year]}/{len(resolved_peers)} peers.")
+        
+        if not revenue_by_cik:
+            logger.warning("Could not fetch any revenue data from SEC EDGAR frames. Peer revenues will be 0.")
+
+        
+        # Build peer list with revenue info, sorted by revenue descending
+        peers = []
+        peer_ciks = set()
+        for p in resolved_peers:
+            cik = p["cik"]
+            revenue = revenue_by_cik.get(cik, 0)
+            peers.append({
+                "cik": int(cik.lstrip("0")) if cik.lstrip("0") else 0,
+                "entity_name": p["entity_name"],
+                "value": revenue,  # 'value' key for compatibility with metrics computation
+                "ticker": p["ticker"],
+            })
+            peer_ciks.add(cik)
+        
+        # Sort by revenue descending
+        peers.sort(key=lambda x: x.get("value", 0), reverse=True)
+        
+        logger.info(f"Found {len(peers)} LLM-identified peer companies for benchmarking.")
             
-        logger.info(f"Found {len(peers)} peer companies for benchmarking.")
-            
-        # 3. Define metrics and tags (supporting fallback tags)
+        # =====================================================================
+        # STEP 3: Fetch financial data frames for all metric tags
+        # =====================================================================
         instant_tags = {
-            "Assets", "StockholdersEquity", "AssetsCurrent", "LiabilitiesCurrent",
-            "LongTermDebtNoncurrent", "LongTermDebt", "DebtCurrent", "ShortTermBorrowings",
-            "CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalentsFairValueDisclosure",
-            "CashAndCashEquivalents"
+            "Assets", "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            "AssetsCurrent", "LiabilitiesCurrent",
+            "LongTermDebtNoncurrent", "LongTermDebt", "LongTermNotesPayable",
+            "DebtCurrent", "ShortTermBorrowings", "LongTermDebtCurrent", "CommercialPaper", "NotesPayableCurrent",
+            "CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalentsFairValueDisclosure", "CashAndCashEquivalents", "Cash", "CashCashEquivalentsAndShortTermInvestments"
         }
         
-        # Collect all tags needed for standard queries
         standard_tags = {
-            "GrossProfit", "OperatingIncomeLoss", "NetIncomeLoss", "ProfitLoss",
-            "Assets", "StockholdersEquity", "AssetsCurrent", "LiabilitiesCurrent",
-            "InterestExpense", "InterestExpenseDebt",
-            "LongTermDebtNoncurrent", "LongTermDebt", "DebtCurrent", "ShortTermBorrowings",
-            "NetCashProvidedByUsedInOperatingActivities", "PaymentsToAcquirePropertyPlantAndEquipment",
-            "DepreciationDepletionAndAmortization", "Depreciation",
-            "CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalentsFairValueDisclosure", "CashAndCashEquivalents",
-            "Revenues", "SalesRevenueNet", "SalesRevenueGoodsNet"
+            "GrossProfit", "OperatingIncomeLoss", "NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss", "NetIncome",
+            "Assets", "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            "AssetsCurrent", "LiabilitiesCurrent",
+            "InterestExpense", "InterestAndDebtExpense", "InterestExpenseDebt", "InterestExpenseRelatedParty", "InterestExpenseNonoperating",
+            "LongTermDebtNoncurrent", "LongTermDebt", "LongTermNotesPayable",
+            "DebtCurrent", "ShortTermBorrowings", "LongTermDebtCurrent", "CommercialPaper", "NotesPayableCurrent",
+            "NetCashProvidedByUsedInOperatingActivities", 
+            "PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "CapitalExpenditureContinuingOperations", "PaymentsForCapitalImprovements",
+            "DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "Depreciation", "AmortizationOfIntangibleAssets",
+            "CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalentsFairValueDisclosure", "CashAndCashEquivalents", "Cash", "CashCashEquivalentsAndShortTermInvestments",
+            "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet", "SalesRevenueGoodsNet", "SalesRevenueServicesNet"
         }
         
-        # 4. Fetch frames data for tags
-        # Chotha step: Ab jo Top 20 peers mile hain, unke baki sabhi financial items (jaise Profit, Assets, Debt) API se mangwana
         frames_cache = {}
         for tag in standard_tags:
-            # Point-in-time instant tags require CY{year}Q4I period format
             period_str = f"CY{self.benchmark_year}Q4I" if tag in instant_tags else f"CY{self.benchmark_year}"
             
             try:
@@ -173,7 +277,7 @@ class SectorBenchmarkEngine:
                 
         # Fetch previous year revenues for YoY growth computation
         prev_rev_cache = {}
-        for tag in ["Revenues", "SalesRevenueNet", "SalesRevenueGoodsNet"]:
+        for tag in ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet", "SalesRevenueGoodsNet", "SalesRevenueServicesNet"]:
             try:
                 resp = call_mcp_tool_sync(
                     "mcp_servers/sec_edgar_server.py", 
@@ -191,26 +295,14 @@ class SectorBenchmarkEngine:
             else:
                 prev_rev_cache[tag] = {}
                 
-        # 5. Fetch CIK-to-ticker mapping and market caps for EV/EBITDA
-        # Panchwa step: Valuation ratios (EV/EBITDA) nikalne ke liye Market Cap chahiye, jiske liye yfinance use karenge
-        cik_to_ticker = {}
-        try:
-            tickers_info = call_mcp_tool_sync("mcp_servers/sec_edgar_server.py", "get_company_tickers", {})
-            if isinstance(tickers_info, str):
-                tickers_info = json.loads(tickers_info)
-            if tickers_info:
-                for key, val in tickers_info.items():
-                    c = str(val["cik_str"]).zfill(10)
-                    cik_to_ticker[c] = val["ticker"]
-        except Exception as e:
-            logger.warning(f"Failed to fetch company tickers mapping: {e}")
-            
+        # =====================================================================
+        # STEP 4: Fetch market caps for EV/EBITDA
+        # =====================================================================
         peer_market_caps = {}
-        # Fetch market caps only for the top 10 peers by revenue to stay within yfinance limits
         yfinance_peers = peers[:10]
         for p in yfinance_peers:
+            ticker = p.get("ticker")
             cik_str = str(p["cik"]).zfill(10)
-            ticker = cik_to_ticker.get(cik_str)
             if ticker:
                 try:
                     logger.info(f"Fetching market cap for peer {ticker} ({cik_str})")
@@ -229,16 +321,15 @@ class SectorBenchmarkEngine:
                 except Exception as e:
                     logger.warning(f"Failed to fetch market cap for peer {ticker} ({cik_str}): {e}")
 
-        # 6. Define calculation helpers
+        # =====================================================================
+        # STEP 5: Compute the 12 Metrics
+        # =====================================================================
         def get_value(cik: str, tags: list[str], cache: dict) -> float | None:
             for tag in tags:
                 if tag in cache and cik in cache[tag]:
                     return cache[tag][cik]
             return None
-            return None
 
-        # 7. Compute the 12 Metrics
-        # Satwa step: Sabhi 20 peers ka mathematical calculation karna aur unko rank karna
         metrics_definitions = {
             "Gross Margin": {"ratio_key": "gross_margin", "higher_is_better": True, "percentage": True},
             "Operating Margin": {"ratio_key": "operating_margin", "higher_is_better": True, "percentage": True},
@@ -275,24 +366,24 @@ class SectorBenchmarkEngine:
                 cik = str(comp["cik"]).zfill(10)
                 
                 # Fetch base components
-                rev_curr = get_value(cik, ["Revenues", "SalesRevenueNet", "SalesRevenueGoodsNet"], frames_cache)
-                rev_prev = get_value(cik, ["Revenues", "SalesRevenueNet", "SalesRevenueGoodsNet"], prev_rev_cache)
+                rev_curr = get_value(cik, ["Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet", "SalesRevenueServicesNet"], frames_cache)
+                rev_prev = get_value(cik, ["Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet", "SalesRevenueServicesNet"], prev_rev_cache)
                 gp = get_value(cik, ["GrossProfit"], frames_cache)
                 op_inc = get_value(cik, ["OperatingIncomeLoss"], frames_cache)
-                ni = get_value(cik, ["NetIncomeLoss", "ProfitLoss"], frames_cache)
+                ni = get_value(cik, ["NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss", "NetIncome"], frames_cache)
                 assets = get_value(cik, ["Assets"], frames_cache)
-                equity = get_value(cik, ["StockholdersEquity"], frames_cache)
+                equity = get_value(cik, ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], frames_cache)
                 ca = get_value(cik, ["AssetsCurrent"], frames_cache)
                 cl = get_value(cik, ["LiabilitiesCurrent"], frames_cache)
-                int_exp = get_value(cik, ["InterestExpense", "InterestExpenseDebt"], frames_cache)
-                da = get_value(cik, ["DepreciationDepletionAndAmortization", "Depreciation"], frames_cache) or 0
+                int_exp = get_value(cik, ["InterestExpense", "InterestAndDebtExpense", "InterestExpenseDebt", "InterestExpenseRelatedParty", "InterestExpenseNonoperating"], frames_cache)
+                da = get_value(cik, ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "Depreciation", "AmortizationOfIntangibleAssets"], frames_cache) or 0
                 
-                lt_debt = get_value(cik, ["LongTermDebtNoncurrent", "LongTermDebt"], frames_cache) or 0
-                st_debt = get_value(cik, ["DebtCurrent", "ShortTermBorrowings"], frames_cache) or 0
-                cash = get_value(cik, ["CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalentsFairValueDisclosure", "CashAndCashEquivalents"], frames_cache) or 0
+                lt_debt = get_value(cik, ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermNotesPayable"], frames_cache) or 0
+                st_debt = get_value(cik, ["DebtCurrent", "ShortTermBorrowings", "LongTermDebtCurrent", "CommercialPaper", "NotesPayableCurrent"], frames_cache) or 0
+                cash = get_value(cik, ["CashAndCashEquivalentsAtCarryingValue", "Cash", "CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments", "CashAndCashEquivalentsFairValueDisclosure"], frames_cache) or 0
                 
                 ocf = get_value(cik, ["NetCashProvidedByUsedInOperatingActivities"], frames_cache)
-                capex = get_value(cik, ["PaymentsToAcquirePropertyPlantAndEquipment"], frames_cache)
+                capex = get_value(cik, ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "CapitalExpenditureContinuingOperations", "PaymentsForCapitalImprovements"], frames_cache)
                 
                 # Compute EBITDA
                 ebitda = (op_inc + da) if op_inc is not None else None
@@ -351,13 +442,13 @@ class SectorBenchmarkEngine:
             peer_values.sort()
             n_peers = len(peer_values)
             
-            # Median (Becho-beech ki value, average se zyada accurate hoti hai kyunki ek bahut badi company result kharab nahi kar sakti)
+            # Median
             if n_peers % 2 == 0:
                 sector_median = (peer_values[n_peers//2 - 1] + peer_values[n_peers//2]) / 2
             else:
                 sector_median = peer_values[n_peers//2]
                 
-            # Mean (Saari values ka normal average)
+            # Mean
             sector_mean = sum(peer_values) / n_peers
             
             percentile = None
@@ -366,14 +457,11 @@ class SectorBenchmarkEngine:
             note = None
             
             if target_status == "COMPUTED" and target_val is not None:
-                # Target percentile = percentage of peers with LOWER value (Target se kitne log peeche hain)
                 lower_count = sum(1 for v in peer_values if v < target_val)
                 percentile = int((lower_count / n_peers) * 100)
                 
-                # Agar kisi ratio ka kam hona achha hai (e.g. Debt/EBITDA), to hum rank ulta (100 - percentile) se check karenge
                 eval_percentile = percentile if details["higher_is_better"] else (100 - percentile)
                 
-                # Ye company ka final verdict/grade hai market ke hisab se
                 if eval_percentile >= 75:
                     relative_position = "ABOVE_AVERAGE"
                 elif eval_percentile >= 50:

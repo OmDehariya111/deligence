@@ -156,7 +156,7 @@ class Section3Writer:
             currency_format=True
         )
         
-        ocf_data = [f.get('operating_cash_flow', 0) or 0 for f in financials]
+        ocf_data = [(f.get('operating_cash_flow', 0) or 0) / 1e9 for f in financials]
         cf_waterfall = chart_engine.bar_chart(
             labels=years,
             datasets=[
@@ -164,7 +164,7 @@ class Section3Writer:
             ],
             title="Cash Flow Waterfall",
             stacked=False,
-            currency_format=True
+            y_label="$ Billions"
         )
         
         html = f"""

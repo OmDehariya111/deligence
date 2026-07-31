@@ -16,7 +16,23 @@ class Section11Writer:
         self.data = data
 
     def generate(self) -> str:
+        # Primary source: MI summary JSON (may be empty)
         implied_val = self.data.get('market_intel_summary', {}).get('IMPLIED_VALUATION', {})
+        
+        # Fallback: SQLite table loaded by data_collector (list of dicts)
+        if not implied_val:
+            iv_rows = self.data.get('implied_valuation', [])
+            if iv_rows:
+                # Convert list of row dicts to {method_name: {implied_ps_low, ...}} format
+                for row in iv_rows:
+                    method_name = row.get('method', row.get('valuation_method', f'Method'))
+                    implied_val[method_name] = {
+                        'implied_ps_low': row.get('implied_ps_low', 0),
+                        'implied_ps_base': row.get('implied_ps_base', 0),
+                        'implied_ps_high': row.get('implied_ps_high', 0),
+                        'upside_downside_pct': row.get('upside_downside_pct', 0),
+                    }
+        
         comp_data = self.data.get('competitor_market_data', [])
         
         # Get target current price

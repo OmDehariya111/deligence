@@ -106,36 +106,68 @@ class Section10Writer:
             elif tc.get('is_median'):
                 cls = "median-row"
             
-            def _sf(val):
-                try: return float(val)
-                except (ValueError, TypeError): return 0.0
+            def _fmt_mult(val):
+                if val is None: return "N/A"
+                try:
+                    v = float(val)
+                    if v == 0.0: return "N/A"
+                    return f"{v:.2f}x"
+                except (ValueError, TypeError):
+                    return "N/A"
 
             tc_html += f"""
                 <tr class="{cls}">
                     <td>{tc.get('ticker', 'N/A')}</td>
-                    <td class="num">{_sf(tc.get('ev_revenue')):.2f}x</td>
-                    <td class="num">{_sf(tc.get('ev_ebitda')):.2f}x</td>
-                    <td class="num">{_sf(tc.get('ev_ebit')):.2f}x</td>
-                    <td class="num">{_sf(tc.get('p_e')):.2f}x</td>
-                    <td class="num">{_sf(tc.get('p_fcf')):.2f}x</td>
+                    <td class="num">{_fmt_mult(tc.get('ev_revenue'))}</td>
+                    <td class="num">{_fmt_mult(tc.get('ev_ebitda'))}</td>
+                    <td class="num">{_fmt_mult(tc.get('ev_ebit'))}</td>
+                    <td class="num">{_fmt_mult(tc.get('p_e'))}</td>
+                    <td class="num">{_fmt_mult(tc.get('p_fcf'))}</td>
                 </tr>
             """
         tc_html += "</tbody></table></div>"
 
         # Charts setup
         tickers = [c.get('ticker', 'Unknown') for c in named_competitors]
-        mcaps = [c.get('market_cap_bn', 0) * 1_000_000_000 for c in named_competitors]
+        mcaps = [c.get('market_cap_bn', 0) for c in named_competitors]  # already in billions
         
         mcap_chart = chart_engine.bar_chart(
             labels=tickers,
             datasets=[{"label": "Market Cap", "data": mcaps}],
             title="Market Cap Comparison",
-            currency_format=True
+            y_label="$ Billions"
         )
 
         moat_width = comp_moat.get('moat_width', 'N/A')
         moat_narrative = comp_moat.get('moat_narrative', 'N/A')
         verdict = comp_position.get('verdict', 'N/A')
+
+        # Fix: Compute competitive verdict from actual market data if the raw verdict seems wrong
+        if verdict in ('N/A', 'BELOW_AVERAGE', 'UNKNOWN', '') or not verdict:
+            # Determine from market cap comparison: if target has largest market cap among competitors, it's strong
+            target_ticker = self.data.get('ticker', '')
+            target_mcap = 0
+            max_comp_mcap = 0
+            for cm in competitor_market:
+                mcap_val = cm.get('market_cap', 0) or 0
+                if cm.get('ticker') == target_ticker:
+                    target_mcap = mcap_val
+                else:
+                    if mcap_val > max_comp_mcap:
+                        max_comp_mcap = mcap_val
+            
+            if target_mcap > 0 and max_comp_mcap > 0:
+                ratio = target_mcap / max_comp_mcap
+                if ratio > 2.0:
+                    verdict = "DOMINANT — Market leader with significantly larger market capitalization than closest competitor"
+                elif ratio > 1.0:
+                    verdict = "STRONG — Leads the competitive set by market capitalization"
+                elif ratio > 0.5:
+                    verdict = "COMPETITIVE — Within striking distance of market leader"
+                elif ratio > 0.2:
+                    verdict = "MODERATE — Smaller player in a larger competitive landscape"
+                else:
+                    verdict = "EMERGING — Significantly smaller than dominant competitors"
 
         def _format_list(items):
             if not items: return "N/A"

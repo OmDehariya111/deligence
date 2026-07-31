@@ -237,7 +237,14 @@ def get_job_memo_pdf(job_id: str, db: Session = Depends(get_db), current_user: U
         
         if not os.path.exists(memo_dir):
             raise HTTPException(status_code=404, detail="Memo not ready yet")
+        
+        # Check if a PDF already exists (Memo Agent generates one during the pipeline)
+        for filename in os.listdir(memo_dir):
+            if filename.endswith(".pdf"):
+                existing_pdf = os.path.abspath(os.path.join(memo_dir, filename))
+                return FileResponse(existing_pdf, media_type="application/pdf", filename=f"{job_id}_Investment_Memo.pdf")
             
+        # Fallback: Generate PDF via Playwright if none exists
         html_path = None
         for filename in os.listdir(memo_dir):
             if filename.endswith(".html"):

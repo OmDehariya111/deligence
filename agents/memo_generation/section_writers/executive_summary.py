@@ -60,7 +60,8 @@ class Section1Writer:
         qoe_label = qoe.get('earnings_quality_label', 'UNKNOWN')
         
         market = self.data.get('market_intel_summary', {})
-        comp_position = market.get('competitive_position_verdict', 'UNKNOWN')
+        ocp = market.get('OVERALL_COMPETITIVE_POSITION', {})
+        comp_position = ocp.get('verdict', 'UNKNOWN')
         
         # Risk color
         if risk_score >= 80:
@@ -191,7 +192,7 @@ class Section1Writer:
                             <tr><td><strong>Beta</strong></td><td class="num">{beta_str}</td></tr>
                             <tr><td><strong>YTD Return</strong></td><td class="num">{ytd}</td></tr>
                             <tr><td><strong>52 Wk Range</strong></td><td class="num">{wk52}</td></tr>
-                            <tr><td><strong>Consensus</strong></td><td>{consensus}</td></tr>
+                            <tr><td><strong>Consensus</strong></td><td class="num">{consensus}</td></tr>
                             <tr><td><strong>Price Target</strong></td><td class="num">{target_price}</td></tr>
                         </tbody>
                     </table>

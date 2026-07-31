@@ -145,8 +145,9 @@ def verify_financial_data(data: dict) -> dict:
             source_type = "MISSING"
 
             if isinstance(field_meta, dict):
-                source_tag = field_meta.get("source", field_meta.get("tag", "N/A"))
-                if field_meta.get("computed") or "computed" in str(source_tag).lower():
+                source_tag = field_meta.get("xbrl_tag", field_meta.get("tag", field_meta.get("source", "N/A")))
+                raw_source = field_meta.get("source", "")
+                if field_meta.get("computed") or "computed" in str(raw_source).lower():
                     source_type = "COMPUTED"
                     fields_computed += 1
                     # IF COMPUTED, PREFER FORMULA

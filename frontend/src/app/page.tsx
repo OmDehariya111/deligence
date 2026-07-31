@@ -13,11 +13,11 @@ import { ScrollProgress } from "@/components/site/ScrollProgress";
 import { PageTransition } from "@/components/site/PageTransition";
 
 export const metadata: Metadata = {
-  title: "DeligenX — Investment memos that write themselves",
+  title: "DeligenX - An AI Powered Due Deligence Platform",
   description:
     "Turn any US ticker into an institutional-grade investment memorandum in minutes. Autonomous 5-agent AI, SEC-cited, deterministic risk models.",
   openGraph: {
-    title: "DeligenX — Investment memos that write themselves",
+    title: "DeligenX - An AI Powered Due Deligence Platform",
     description:
       "Autonomous due diligence. Institutional grade. Minutes, not weeks.",
   },

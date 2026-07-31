@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Menu, X, ArrowRight, LayoutDashboard, LogOut, Settings, History, User as UserIcon } from "lucide-react";
+import { Menu, X, ArrowRight, LayoutDashboard, LogOut, Settings, History, User as UserIcon, ShieldAlert } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/components/providers/auth-provider";
 
@@ -74,6 +74,19 @@ export function Navbar() {
             {!isLoading && user ? (
               /* ── Logged-in: Dashboard + User Menu ── */
               <>
+                {user.is_admin && (
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="group relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-[#ff5c5c] blur opacity-40 group-hover:opacity-100 transition-opacity duration-500 rounded-md"></div>
+                    <Link
+                      href="/admin"
+                      className="relative flex items-center gap-1.5 rounded-md border border-purple-500/50 bg-[#0a0a0a] px-3.5 py-1.5 text-[13px] font-bold tracking-widest text-purple-200 transition-all duration-300 hover:text-white hover:border-purple-400"
+                    >
+                      <ShieldAlert className="h-3.5 w-3.5 text-purple-400" />
+                      ADMIN
+                    </Link>
+                  </motion.div>
+                )}
+
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
                   <Link
                     href="/dashboard"

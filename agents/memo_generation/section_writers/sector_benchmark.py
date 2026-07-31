@@ -96,12 +96,13 @@ class Section8Writer:
             c_val = m_data.get('company_value', 0)
             s_med = m_data.get('sector_median', 0)
             s_mean = m_data.get('sector_mean', 0)
-            pct = m_data.get('company_percentile', 0)
+            pct = m_data.get('company_percentile') or 0
             pos = m_data.get('relative_position', 'N/A')
 
             labels.append(m_name)
-            company_radars.append(pct) # Normalized to percentile for radar
-            percentiles.append(pct)
+            pct_safe = pct if pct is not None else 0
+            company_radars.append(pct_safe)
+            percentiles.append(pct_safe)
             
             c_class = self.get_color_class(pos)
 
@@ -148,7 +149,7 @@ class Section8Writer:
                 <h2>Sector Benchmarking</h2>
             </div>
             
-            <h3>Top 20 SIC Peers</h3>
+            <h3>Top Sector Peers</h3>
             {peers_html}
 
             <h3>12-Metric Benchmark</h3>

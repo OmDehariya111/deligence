@@ -23,8 +23,8 @@ export function Footer() {
         <div className="grid grid-cols-2 gap-10 md:grid-cols-5">
           <div className="col-span-2 md:col-span-2">
             <Logo />
-            <p className="mt-4 max-w-xs text-sm text-muted-foreground">
-              Autonomous due diligence. Institutional grade. Minutes, not weeks.
+            <p className="mt-4 max-w-sm text-sm text-muted-foreground leading-relaxed">
+              Delivering AI-powered institutional grade due diligence. Empowering analysts with deep financial insights in minutes, not weeks.
             </p>
             <div className="mt-6 flex gap-2">
               {[Github, Twitter, Linkedin].map((Icon, i) => (
@@ -61,10 +61,7 @@ export function Footer() {
         </div>
 
         <div className="mt-14 flex flex-col items-start justify-between gap-3 border-t border-[rgba(255,255,255,0.06)] pt-6 text-xs text-muted-foreground md:flex-row md:items-center">
-          <p>© 2026 DeligenX · Built for IITISoC 2026</p>
-          <p className="font-mono text-[11px] uppercase tracking-wider">
-            v0.1.0 · <span className="text-primary/80">status: operational</span>
-          </p>
+          <p>© 2026 DeligenX · All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -238,28 +238,34 @@ class RiskPreProcessor:
     def _normalize_fraud_distress(self, fd_raw: dict) -> dict[str, Any]:
         """
         # Ye Altman Z (Bankruptcy) aur Beneish M (Fraud) ke raw scores ko clean karke unka "most recent year" nikalta hai.
-        Convert to canonical structure expected by module1:
-        {
-          "beneish_m_score": {"verdict": ..., "m_score": ..., "individual_flags": [...]},
-          "altman_z_score": {
-            "most_recent_year": {"verdict": ..., "z_score": ...},
-            "all_years": [...]
-          }
-        }
+        Convert to canonical structure expected by downstream modules.
+
+        Output structure includes persistence metrics for the deal breaker module:
+          beneish_m_score.likely_count = how many year-pairs triggered LIKELY_MANIPULATOR
+          beneish_m_score.all_scores   = full history for multi-year analysis
+          beneish_m_score.note         = may contain HYPERGROWTH FALSE-POSITIVE WARNING
         """
         if not fd_raw or not isinstance(fd_raw, dict):
             return {"beneish_m_score": {}, "altman_z_score": {}}
 
-        # Beneish: take most recent pair (last in list)
+        # Beneish: take most recent pair (last in list) + compute persistence metrics
         beneish_result = {}
         beneish_scores = fd_raw.get("beneish_scores", [])
         if beneish_scores:
             latest_b = beneish_scores[-1]  # most recent year pair
+            likely_count = sum(1 for s in beneish_scores if s.get("verdict") == "LIKELY_MANIPULATOR")
+            grey_count = sum(1 for s in beneish_scores if s.get("verdict") == "GREY_ZONE")
+            total_computed = sum(1 for s in beneish_scores if s.get("verdict") not in ["NOT_COMPUTABLE"])
             beneish_result = {
                 "verdict": latest_b.get("verdict", "NOT_COMPUTABLE"),
                 "m_score": latest_b.get("m_score"),
                 "individual_flags": latest_b.get("individual_flags", []),
-                "fiscal_year_pair": latest_b.get("fiscal_year_pair")
+                "fiscal_year_pair": latest_b.get("fiscal_year_pair"),
+                "note": latest_b.get("note", ""),
+                "all_scores": beneish_scores,
+                "likely_count": likely_count,
+                "grey_count": grey_count,
+                "total_computed": total_computed,
             }
 
         # Altman: take most recent fiscal year

@@ -63,6 +63,34 @@ class FraudDistressEngine:
                 verdict="NOT_COMPUTABLE",
                 reason="No consecutive fiscal years available."
             )]
+        
+        # Multi-year persistence check (research best practice):
+        # A company that is persistently LIKELY_MANIPULATOR for 3+ consecutive years
+        # is a stronger signal than a single year anomaly.
+        # We tag each score with persistence context.
+        likely_count = sum(1 for r in results if r.verdict == "LIKELY_MANIPULATOR")
+        if likely_count >= 3:
+            persistence_note = f"PERSISTENT: LIKELY_MANIPULATOR verdict for {likely_count}/{len(results)} year-pairs. Sustained aggressive accounting signal."
+        elif likely_count == 2:
+            persistence_note = f"RECURRING: LIKELY_MANIPULATOR for {likely_count}/{len(results)} year-pairs. Monitor closely."
+        else:
+            persistence_note = None
+        
+        if persistence_note:
+            # Annotate the latest result with persistence context
+            latest = results[-1]
+            existing_note = latest.note or ""
+            results[-1] = BeneishScore(
+                model=latest.model,
+                fiscal_year_pair=latest.fiscal_year_pair,
+                variables=latest.variables,
+                m_score=latest.m_score,
+                verdict=latest.verdict,
+                individual_flags=latest.individual_flags,
+                missing_variables=latest.missing_variables,
+                reason=latest.reason,
+                note=f"{existing_note} | {persistence_note}"
+            )
             
         return results
 
@@ -101,7 +129,9 @@ class FraudDistressEngine:
                 return None
             return num / den
             
-        # 1. DSRI
+        # 1. DSRI — Days' Sales in Receivables Index
+        # Measures if accounts receivable are growing faster than revenues.
+        # A large increase (>1.31) suggests revenues may be inflated or collections declining.
         t_dsri = 1.31
         ar_rev_c = _guard_ratio(ar_c, rev_c)
         ar_rev_p = _guard_ratio(ar_p, rev_p)
@@ -110,7 +140,8 @@ class FraudDistressEngine:
         elif dsri > t_dsri: flags.append("DSRI above threshold")
         variables["DSRI"] = BeneishVariable(value=dsri, threshold=t_dsri, flag=(dsri > t_dsri) if dsri is not None else False)
 
-        # 2. GMI
+        # 2. GMI — Gross Margin Index
+        # Measures if gross margins are deteriorating (>1.19 = worse margins = manipulation pressure).
         t_gmi = 1.19
         gm_c = _guard_ratio(gp_c, rev_c)
         gm_p = _guard_ratio(gp_p, rev_p)
@@ -120,7 +151,8 @@ class FraudDistressEngine:
         elif gmi > t_gmi: flags.append("GMI above threshold")
         variables["GMI"] = BeneishVariable(value=gmi, threshold=t_gmi, flag=(gmi > t_gmi) if gmi is not None else False)
 
-        # 3. AQI
+        # 3. AQI — Asset Quality Index
+        # Measures proportion of non-current/non-PPE assets. An increase suggests cost capitalization.
         t_aqi = 1.25
         if ca_c is not None and ppe_c is not None and ta_c is not None and ta_c != 0:
             aq_c = 1 - ((ca_c + ppe_c) / ta_c)
@@ -137,14 +169,19 @@ class FraudDistressEngine:
         elif aqi > t_aqi: flags.append("AQI above threshold")
         variables["AQI"] = BeneishVariable(value=aqi, threshold=t_aqi, flag=(aqi > t_aqi) if aqi is not None else False)
 
-        # 4. SGI
+        # 4. SGI — Sales Growth Index
+        # Measures revenue growth rate. The 1.607 value is the MEAN SGI of manipulators in Beneish's original
+        # 1999 sample — NOT a hard fraud threshold. Non-manipulators averaged ~1.134.
+        # IMPORTANT: For hypergrowth companies (SGI > 2.0), this variable alone is NOT indicative of manipulation.
+        # It must be corroborated by high TATA (non-cash earnings) or DSRI (receivables inflation).
         t_sgi = 1.607
         sgi = _guard_ratio(rev_c, rev_p)
         if sgi is None: missing.append("SGI")
         elif sgi > t_sgi: flags.append("SGI above threshold")
         variables["SGI"] = BeneishVariable(value=sgi, threshold=t_sgi, flag=(sgi > t_sgi) if sgi is not None else False)
 
-        # 5. DEPI
+        # 5. DEPI — Depreciation Index
+        # Measures if the firm has slowed its depreciation rate (income-increasing policy shift).
         t_depi = 1.00
         if dep_p is not None and ppe_p is not None and (ppe_p + dep_p) != 0:
             dep_rate_p = dep_p / (ppe_p + dep_p)
@@ -161,7 +198,8 @@ class FraudDistressEngine:
         elif depi > t_depi: flags.append("DEPI above threshold")
         variables["DEPI"] = BeneishVariable(value=depi, threshold=t_depi, flag=(depi > t_depi) if depi is not None else False)
 
-        # 6. SGAI
+        # 6. SGAI — Sales, General & Administrative Expenses Index
+        # Measures disproportionate overhead increases relative to revenue growth.
         t_sgai = 1.00
         sga_rev_c = _guard_ratio(sga_c, rev_c)
         sga_rev_p = _guard_ratio(sga_p, rev_p)
@@ -170,7 +208,8 @@ class FraudDistressEngine:
         elif sgai > t_sgai: flags.append("SGAI above threshold")
         variables["SGAI"] = BeneishVariable(value=sgai, threshold=t_sgai, flag=(sgai > t_sgai) if sgai is not None else False)
 
-        # 7. LVGI
+        # 7. LVGI — Leverage Index
+        # Measures if total leverage (LTD + current liabilities) relative to assets is increasing.
         t_lvgi = 1.00
         if ltd_c is not None and cl_c is not None and ta_c is not None and ta_c != 0:
             lev_c = (ltd_c + cl_c) / ta_c
@@ -187,7 +226,11 @@ class FraudDistressEngine:
         elif lvgi > t_lvgi: flags.append("LVGI above threshold")
         variables["LVGI"] = BeneishVariable(value=lvgi, threshold=t_lvgi, flag=(lvgi > t_lvgi) if lvgi is not None else False)
 
-        # 8. TATA
+        # 8. TATA — Total Accruals to Total Assets
+        # Correct formula per Beneish 1999: (Net Income - Operating Cash Flow) / Total Assets.
+        # This isolates the non-cash component of earnings. A high positive TATA means earnings
+        # are NOT backed by cash — the single most important red flag in the model.
+        # A NEGATIVE TATA (CFO > Net Income) is a strong anti-manipulation signal.
         t_tata = 0.05
         if ni_c is not None and ocf_c is not None and ta_c is not None and ta_c != 0:
             tata = (ni_c - ocf_c) / ta_c
@@ -209,21 +252,47 @@ class FraudDistressEngine:
         v_lvgi = lvgi if lvgi is not None else 1.0
         v_tata = tata if tata is not None else 0.0
 
-        # Ye final mathematical formula hai jisme weights (coefficients) diye gaye hain
+        # Final formula from Beneish (1999) — 8-variable version
         m_score = -4.840 + (0.920 * v_dsri) + (0.528 * v_gmi) + (0.404 * v_aqi) + (0.892 * v_sgi) + (0.115 * v_depi) - (0.172 * v_sgai) + (4.679 * v_tata) - (0.327 * v_lvgi)
         m_score = round(m_score, 4)
         
-        # Threshold: Agar score -1.78 se zyada ho gaya, matlab fraud/manipulation ke chances hain
+        # Research-backed tiered threshold system (Beneish 1999):
+        # Primary warning threshold: -2.22 (8-variable model calibration)
+        # High risk threshold: -1.78 (higher sensitivity — fewer false negatives)
+        # Grey zone between -2.22 and -1.78 is ambiguous and requires qualitative overlay.
         if m_score > -1.78:
             verdict = "LIKELY_MANIPULATOR"
-        elif -2.22 <= m_score <= -1.78:
+        elif m_score > -2.22:
             verdict = "GREY_ZONE"
         else:
             verdict = "UNLIKELY_MANIPULATOR"
 
+        # ── Hypergrowth False-Positive Detection ─────────────────────────────
+        # Research finding: The model systematically misclassifies legitimate hypergrowth
+        # companies (NVDA, AMZN, TSLA) as LIKELY_MANIPULATOR due to their high SGI.
+        # Key insight from Beneish literature: If SGI is the primary driver AND
+        # TATA is negative (CFO > Net Income = cash-backed earnings), the flag is
+        # very likely a false positive caused by genuine revenue acceleration.
+        hypergrowth_fp_detected = False
+        hypergrowth_note = ""
+        if verdict == "LIKELY_MANIPULATOR" and sgi is not None and tata is not None:
+            sgi_only_driver = sgi > t_sgi and tata <= t_tata  # SGI flagged, TATA clean
+            cash_backed_earnings = tata < 0  # CFO > Net Income = STRONG anti-manipulation
+            if sgi_only_driver and cash_backed_earnings:
+                hypergrowth_fp_detected = True
+                hypergrowth_note = (
+                    f" | HYPERGROWTH FALSE-POSITIVE WARNING: SGI={sgi:.3f} (revenue acceleration) "
+                    f"is the primary M-Score driver, but TATA={tata:.4f} < 0 confirms earnings "
+                    f"are fully cash-backed (CFO exceeds Net Income). Per Beneish (1999) literature, "
+                    f"this pattern is characteristic of legitimate hypergrowth, not manipulation. "
+                    f"Qualitative filing review is required before escalating this flag."
+                )
+
         note = "All 8 variables computed. Score is reliable."
         if missing:
             note = f"Score is an approximation. Missing variables substituted with research means: {', '.join(missing)}."
+        if hypergrowth_note:
+            note += hypergrowth_note
 
         return BeneishScore(
             fiscal_year_pair=f"{prev_year} to {curr_year}",

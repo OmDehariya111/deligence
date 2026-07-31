@@ -41,10 +41,13 @@ class Section9Writer:
         if not concerns:
             concerns_html = "<p class='text-muted'>No particular concerns identified.</p>"
 
-        # Render Data Limitations neatly
+        # Render Data Limitations - only show actual limitations
+        allowed_limitation_keys = {'missing_fields', 'ratios_blocked'}
         if isinstance(limitations, dict):
             lim_html = "<ul>"
             for k, v in limitations.items():
+                if k not in allowed_limitation_keys:
+                    continue
                 if v and (not isinstance(v, list) or len(v) > 0):
                     key_fmt = str(k).replace('_', ' ').title()
                     val_fmt = ", ".join(v) if isinstance(v, list) else str(v)

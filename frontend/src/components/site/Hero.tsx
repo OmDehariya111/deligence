@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Database, FileText, LineChart, Newspaper } from "lucide-react";
+import Link from "next/link";
 import { NeuralOrb } from "./NeuralOrb";
 
 export function Hero() {
@@ -10,7 +11,7 @@ export function Hero() {
   const [focused, setFocused] = useState(false);
 
   return (
-    <section className="relative isolate overflow-hidden pt-28 md:min-h-screen md:pt-24">
+    <section className="relative isolate pt-28 md:min-h-screen md:pt-24">
       {/* Corner mesh glows */}
       <div
         aria-hidden
@@ -27,7 +28,7 @@ export function Hero() {
 
       {/* 3D Orb — absolute on desktop, stacked below on mobile */}
       <div className="pointer-events-none absolute inset-0 -z-0 hidden md:block">
-        <div className="pointer-events-auto absolute right-[-6%] top-1/2 h-[720px] w-[720px] -translate-y-1/2 opacity-90">
+        <div className="pointer-events-auto absolute right-[2%] top-1/2 h-[780px] w-[780px] -translate-y-1/2 opacity-90">
           <NeuralOrb />
         </div>
         <div className="absolute inset-y-0 left-0 w-2/3 bg-gradient-to-r from-background via-background/85 to-transparent" />
@@ -58,16 +59,16 @@ export function Hero() {
               lineHeight: 1.02,
             }}
           >
-            Investment memos
+            Automating
             <br />
-            <span className="whitespace-nowrap">
-              that{" "}
-              <span className="text-gradient-neon italic inline-block pr-2">
-                write
-              </span>
-            </span>{" "}
+            the art of
+            <br />
+            <span className="text-gradient-neon italic inline-block pr-4 pb-1">
+              Financial
+            </span>
+            <br />
             <span className="text-gradient-neon italic inline-block pr-2">
-              themselves.
+              Research.
             </span>
           </motion.h1>
 
@@ -77,67 +78,24 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mt-6 max-w-xl text-[15px] leading-relaxed text-muted-foreground md:text-base"
           >
-            DeligenX ingests SEC filings, runs deterministic financial models, scores six
-            dimensions of risk, and produces a fully-cited investment memorandum —
-            autonomously, in minutes.
+            Experience the future of financial research. DeligenX orchestrates a sophisticated 5-agent AI architecture to autonomously ingest real-time data, execute deterministic risk models, and generate institutional-grade investment memorandums—compressing weeks of due diligence into minutes.
           </motion.p>
 
-          {/* Terminal ticker input */}
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.25 }}
-            className={`mt-8 flex w-full max-w-xl items-center gap-2 rounded-lg border bg-[rgba(8,8,8,0.72)] p-1.5 backdrop-blur-md transition-all ${
-              focused
-                ? "border-primary/60 shadow-[0_0_0_1px_rgba(57,255,136,0.35),0_0_40px_rgba(57,255,136,0.2)]"
-                : "border-[rgba(255,255,255,0.08)]"
-            }`}
+            className="mt-10 flex items-center gap-4"
           >
-            <div className="relative flex flex-1 items-center gap-2 px-3 py-2 font-mono text-sm">
-              <span className="text-primary/80">$</span>
-              <div className="relative flex-1">
-                <input
-                  value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase().slice(0, 6))}
-                  onFocus={() => setFocused(true)}
-                  onBlur={() => setFocused(false)}
-                  className="w-full bg-transparent font-mono text-sm tracking-wider text-foreground focus:outline-none"
-                  aria-label="Enter US stock ticker"
-                />
-                {!ticker && (
-                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center font-mono text-sm text-muted-foreground/70">
-                    AAPL<span className="caret-blink text-primary">_</span>
-                  </span>
-                )}
-              </div>
-            </div>
-            <button className="group inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-shadow neon-glow hover:brightness-110">
-              Analyze
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </button>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.7, delay: 0.4 }}
-            className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground/80"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <Database className="h-3 w-3 text-primary/80" /> SEC EDGAR
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <LineChart className="h-3 w-3 text-primary/80" /> yfinance
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <FileText className="h-3 w-3 text-primary/80" /> FRED
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <Newspaper className="h-3 w-3 text-primary/80" /> NewsAPI
-            </span>
+            <Link
+              href="/dashboard"
+              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-primary px-8 py-3.5 text-sm font-bold text-primary-foreground shadow-[0_0_40px_rgba(57,255,136,0.3)] transition-all hover:scale-[1.02] hover:shadow-[0_0_60px_rgba(57,255,136,0.5)] active:scale-[0.98]"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                Launch Platform
+                <ArrowRight className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
           </motion.div>
         </div>
 

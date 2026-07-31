@@ -1,17 +1,11 @@
 "use client";
 
 import { Suspense, useMemo, useRef, useState, useEffect } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 
-const AGENTS = [
-  { name: "Ingestion", radius: 1.6, speed: 0.32, phase: 0.0, tilt: 0.15 },
-  { name: "Analysis", radius: 2.2, speed: -0.24, phase: 1.3, tilt: -0.1 },
-  { name: "Market Intelligence", radius: 2.7, speed: 0.2, phase: 2.6, tilt: 0.2 },
-  { name: "Risk Assessment", radius: 3.1, speed: -0.16, phase: 3.9, tilt: -0.18 },
-  { name: "Memo Generation", radius: 3.6, speed: 0.13, phase: 5.1, tilt: 0.1 },
-];
+
 
 const COLOR_GREEN = new THREE.Color("#39ff88");
 const COLOR_GREEN_BRIGHT = new THREE.Color("#7bffb5");
@@ -39,6 +33,7 @@ function makeSpriteTexture() {
 type ParticleData = {
   positions: Float32Array;
   colors: Float32Array;
+  baseColors: Float32Array;
   sizes: Float32Array;
   basePos: Float32Array; // rest positions for cursor scatter
   orbit: Float32Array; // per particle: radius, angle, ySpeed, drift
@@ -49,6 +44,7 @@ function buildGalaxy(count: number): ParticleData {
   const positions = new Float32Array(count * 3);
   const basePos = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  const baseColors = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
   const orbit = new Float32Array(count * 4);
   const flicker = new Float32Array(count * 2);
@@ -80,22 +76,30 @@ function buildGalaxy(count: number): ParticleData {
     const base = isCyan ? COLOR_CYAN : Math.random() < 0.3 ? COLOR_GREEN_BRIGHT : COLOR_GREEN;
     // brighter near center
     const b = 0.6 + Math.max(0, 1 - r / 3.5) * 0.6;
-    colors[i * 3] = base.r * b;
-    colors[i * 3 + 1] = base.g * b;
-    colors[i * 3 + 2] = base.b * b;
+    const rCol = base.r * b;
+    const gCol = base.g * b;
+    const bCol = base.b * b;
+
+    colors[i * 3] = rCol;
+    colors[i * 3 + 1] = gCol;
+    colors[i * 3 + 2] = bCol;
+    
+    baseColors[i * 3] = rCol;
+    baseColors[i * 3 + 1] = gCol;
+    baseColors[i * 3 + 2] = bCol;
 
     sizes[i] = 0.02 + Math.random() * 0.05 + (r < 1 ? 0.02 : 0);
 
     orbit[i * 4] = r; // radius
     orbit[i * 4 + 1] = angle; // start angle
-    orbit[i * 4 + 2] = 0.02 + Math.random() * 0.06 + (1 / (r + 0.5)) * 0.05; // angular speed
+    orbit[i * 4 + 2] = 0; // angular speed (0 to preserve exact spiral shape)
     orbit[i * 4 + 3] = Math.random() * Math.PI * 2; // y drift phase
 
     flicker[i * 2] = Math.random() * Math.PI * 2;
     flicker[i * 2 + 1] = 0.5 + Math.random() * 1.2;
   }
 
-  return { positions, colors, sizes, basePos, orbit, flicker };
+  return { positions, colors, baseColors, sizes, basePos, orbit, flicker };
 }
 
 function ParticleField({
@@ -160,10 +164,10 @@ function ParticleField({
       const fl = 0.75 + 0.35 * (0.5 + 0.5 * Math.sin(t * fSp + fPh));
       // reset from base color scaled
       const bi = i * 3;
-      // recompute base color once - we stored final in data.colors
-      cols[bi] = data.colors[bi] * fl;
-      cols[bi + 1] = data.colors[bi + 1] * fl;
-      cols[bi + 2] = data.colors[bi + 2] * fl;
+      // read from unmodified baseColors
+      cols[bi] = data.baseColors[bi] * fl;
+      cols[bi + 1] = data.baseColors[bi + 1] * fl;
+      cols[bi + 2] = data.baseColors[bi + 2] * fl;
     }
     posAttr.needsUpdate = true;
     colAttr.needsUpdate = true;
@@ -191,132 +195,6 @@ function ParticleField({
   );
 }
 
-function AgentHubs({
-  timeRef,
-  onHover,
-  positionsRef,
-}: {
-  timeRef: React.MutableRefObject<number>;
-  onHover: (name: string | null, screen?: { x: number; y: number }) => void;
-  positionsRef: React.MutableRefObject<THREE.Vector3[]>;
-}) {
-  const refs = useRef<THREE.Mesh[]>([]);
-  const { camera, size } = useThree();
-
-  useFrame(() => {
-    const t = timeRef.current;
-    for (let i = 0; i < AGENTS.length; i++) {
-      const a = AGENTS[i];
-      const ang = a.phase + t * a.speed;
-      const x = Math.cos(ang) * a.radius;
-      const z = Math.sin(ang) * a.radius;
-      const y = Math.sin(t * 0.5 + a.phase) * a.tilt;
-      const m = refs.current[i];
-      if (m) {
-        m.position.set(x, y, z);
-        // pulse scale
-        const s = 1 + Math.sin(t * 2 + i) * 0.15;
-        m.scale.setScalar(s);
-      }
-      positionsRef.current[i] = new THREE.Vector3(x, y, z);
-    }
-  });
-
-  return (
-    <group>
-      {AGENTS.map((a, i) => (
-        <mesh
-          key={a.name}
-          ref={(el) => {
-            if (el) refs.current[i] = el;
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            const v = refs.current[i].position.clone().project(camera);
-            onHover(a.name, {
-              x: ((v.x + 1) / 2) * size.width,
-              y: ((-v.y + 1) / 2) * size.height,
-            });
-          }}
-          onPointerOut={() => onHover(null)}
-        >
-          <sphereGeometry args={[0.11, 20, 20]} />
-          <meshBasicMaterial color="#b6ffd8" transparent opacity={0.95} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function AgentTrails({
-  timeRef,
-  positionsRef,
-}: {
-  timeRef: React.MutableRefObject<number>;
-  positionsRef: React.MutableRefObject<THREE.Vector3[]>;
-}) {
-  // 5 travelling packets, each moving from agent i -> i+1
-  const SEGMENTS = 12;
-  const COUNT = 5;
-  const geomRef = useRef<THREE.BufferGeometry>(null!);
-  const positions = useMemo(() => new Float32Array(COUNT * SEGMENTS * 3), []);
-  const colors = useMemo(() => {
-    const c = new Float32Array(COUNT * SEGMENTS * 3);
-    for (let p = 0; p < COUNT; p++) {
-      for (let s = 0; s < SEGMENTS; s++) {
-        const t = s / SEGMENTS;
-        const idx = (p * SEGMENTS + s) * 3;
-        c[idx] = 0.22 + t * 0.5;
-        c[idx + 1] = 1.0;
-        c[idx + 2] = 0.53 + t * 0.3;
-      }
-    }
-    return c;
-  }, []);
-
-  useFrame(() => {
-    const t = timeRef.current;
-    const pts = positionsRef.current;
-    if (pts.length < AGENTS.length) return;
-    for (let p = 0; p < COUNT; p++) {
-      const cycle = (t * 0.35 + p / COUNT) % 1;
-      const seg = Math.floor(cycle * AGENTS.length);
-      const local = (cycle * AGENTS.length) % 1;
-      const from = pts[seg];
-      const to = pts[(seg + 1) % AGENTS.length];
-      for (let s = 0; s < SEGMENTS; s++) {
-        const lag = s / (SEGMENTS * 2);
-        const lt = Math.max(0, Math.min(1, local - lag));
-        const idx = (p * SEGMENTS + s) * 3;
-        // slight arc via lift on midpoint
-        const arc = Math.sin(lt * Math.PI) * 0.25;
-        positions[idx] = from.x + (to.x - from.x) * lt;
-        positions[idx + 1] = from.y + (to.y - from.y) * lt + arc;
-        positions[idx + 2] = from.z + (to.z - from.z) * lt;
-      }
-    }
-    const attr = geomRef.current.attributes.position as THREE.BufferAttribute;
-    attr.needsUpdate = true;
-  });
-
-  return (
-    <points>
-      <bufferGeometry ref={geomRef}>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.09}
-        sizeAttenuation
-        transparent
-        vertexColors
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        opacity={0.9}
-      />
-    </points>
-  );
-}
 
 function GalaxySystem({
   count,
@@ -326,7 +204,6 @@ function GalaxySystem({
   const group = useRef<THREE.Group>(null!);
   const timeRef = useRef(0);
   const cursorRef = useRef({ x: 0, y: 0, z: 0, active: false });
-  const positionsRef = useRef<THREE.Vector3[]>(AGENTS.map(() => new THREE.Vector3()));
 
   useFrame((_, dt) => {
     timeRef.current += dt;
@@ -339,8 +216,6 @@ function GalaxySystem({
   return (
     <group ref={group} scale={[1, 0.55, 1]}>
       <ParticleField count={count} cursorRef={cursorRef} timeRef={timeRef} reactive={false} />
-      <AgentHubs timeRef={timeRef} onHover={() => {}} positionsRef={positionsRef} />
-      <AgentTrails timeRef={timeRef} positionsRef={positionsRef} />
     </group>
   );
 }

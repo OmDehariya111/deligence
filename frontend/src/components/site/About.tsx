@@ -11,12 +11,14 @@ const reveal = (delay: number) => ({
 });
 
 const stack = [
-  "Python",
+  "Next.js App Router",
+  "FastAPI",
   "CrewAI",
-  "SEC EDGAR",
+  "PostgreSQL",
+  "Redis & Celery",
   "ChromaDB",
-  "Anthropic Claude",
   "FastMCP",
+  "yfinance & SEC EDGAR"
 ];
 
 export function About() {
@@ -28,16 +30,11 @@ export function About() {
           className="font-sans text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-foreground md:text-5xl"
         >
           Built for{" "}
-          <span className="text-gradient-neon inline-block pr-2 italic">IITISoC 2026.</span>
+          <span className="text-gradient-neon inline-block pr-2 pb-1 italic">institutional scale.</span>
         </motion.h2>
 
         <motion.p {...reveal(0.08)} className="mt-6 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
-          DeligenX is an autonomous five-agent CrewAI pipeline built end to end — from SEC
-          EDGAR data ingestion and vector-indexed filings, through deterministic financial
-          modelling, competitor comps and six-dimension risk scoring, all the way to a fully
-          validated investment memorandum. Every number in the final document is traced back
-          to its verified source by an anti-hallucination validator. No analyst in the loop,
-          no manual intervention, no unverified claims.
+          DeligenX was engineered from the ground up to solve the most complex challenge in modern finance: asymmetric information processing. By orchestrating a five-agent autonomous AI pipeline, we eliminate human cognitive bias, fatigue, and error. Every metric, from SEC EDGAR ingestion to composite risk scoring, is handled deterministically. The result is unprecedented speed, uncompromising accuracy, and a definitive edge for institutional investors.
         </motion.p>
 
         <motion.div {...reveal(0.14)} className="mt-9 flex flex-wrap gap-2">
@@ -59,9 +56,9 @@ export function About() {
             <Cpu className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-medium text-foreground">Team DeligenX</div>
+            <div className="text-sm font-medium text-foreground">System Architecture</div>
             <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-              IIT Indore Summer of Code · 2026
+              Fully Autonomous · Deterministic Execution
             </div>
           </div>
         </motion.div>

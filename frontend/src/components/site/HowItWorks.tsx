@@ -27,7 +27,7 @@ const stages: Stage[] = [
     icon: Database,
     description:
       "Resolves the ticker to a SEC CIK, pulls 5 years of financial data via SEC EDGAR, and builds a searchable vector store from 10-K, 8-K, and proxy filings.",
-    highlight: { value: "5", label: "Years of filings" },
+    highlight: { value: "5", label: "Years of financials" },
   },
   {
     id: "analysis",
@@ -58,7 +58,7 @@ const stages: Stage[] = [
     name: "Memo Generation Agent",
     icon: FileText,
     description:
-      "Assembles a fully-cited investment memorandum. An anti-hallucination validator cross-checks every single number in the document against its verified source before delivery.",
+      "Synthesizes the entire pipeline into a comprehensive 17-section institutional-grade investment memorandum. Generates 40+ dynamic data visualizations, incorporates deterministic models, and outputs a certified HTML report.",
     highlight: { value: "100%", label: "Numbers traced" },
   },
 ];

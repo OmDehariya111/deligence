@@ -89,17 +89,18 @@ export function FeatureGrid() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-15% 0px" }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-          className="mx-auto max-w-3xl text-center"
+          className="mx-auto max-w-5xl text-center"
         >
           <div className="inline-flex items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.25em] text-primary">
             <span className="h-px w-6 bg-primary/60" />
             Why DeligenX
             <span className="h-px w-6 bg-primary/60" />
           </div>
-          <h2 className="mt-5 font-sans text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-foreground md:text-5xl lg:text-6xl">
-            Built like a real risk desk,{" "}
-            <span className="text-gradient-neon inline-block pr-2 italic">
-              not a demo.
+          <h2 className="mt-5 mx-auto font-sans text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-foreground md:text-5xl lg:text-6xl">
+            <span className="whitespace-nowrap">Uncompromising due diligence,</span>{" "}
+            <br className="hidden md:block" />
+            <span className="text-gradient-neon italic inline-block pr-4 pb-1">
+              executed with precision.
             </span>
           </h2>
         </motion.div>

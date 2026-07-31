@@ -69,3 +69,10 @@ rows.txt
 test.py
 working.md
 *.log
+
+.agents/
+Technical_Report.md
+agents_working.md
+data/cache/ticker_lookups/JPM_phase1.json
+docs/
+new-frontend/

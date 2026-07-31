@@ -117,14 +117,16 @@ class Section6Writer:
         # 8-Variable breakdown table
         beneish_vars = []
         beneish_var_defs = [
-            ("DSRI", "Days Sales in Receivables Index", 1.031, "Receivables growing faster than revenue"),
-            ("GMI", "Gross Margin Index", 1.014, "Declining gross margins"),
-            ("AQI", "Asset Quality Index", 1.039, "Increasing non-current asset capitalization"),
-            ("SGI", "Sales Growth Index", 1.134, "Rapid revenue growth (pressure to maintain)"),
-            ("DEPI", "Depreciation Index", 1.001, "Slowing depreciation (asset life extension)"),
-            ("SGAI", "SGA Expense Index", 1.054, "Decreasing SGA efficiency"),
-            ("LVGI", "Leverage Index", 1.111, "Increasing leverage"),
-            ("TATA", "Total Accruals to Total Assets", 0.018, "High accruals vs cash earnings"),
+            # (abbrev, display_name, actual_Beneish_threshold, description)
+            # Thresholds from Beneish (1999) — "The Detection of Earnings Manipulation"
+            ("DSRI", "Days Sales in Receivables Index", 1.31,  "Receivables growing disproportionately faster than revenue (potential revenue inflation)"),
+            ("GMI",  "Gross Margin Index",              1.19,  "Gross margin deterioration — creates pressure to manipulate earnings"),
+            ("AQI",  "Asset Quality Index",             1.25,  "Rising proportion of intangible/non-current assets — signals cost capitalization"),
+            ("SGI",  "Sales Growth Index",              1.607, "Revenue growth rate — NOTE: 1.607 is the mean SGI of manipulators in Beneish's sample, not an absolute fraud threshold. High SGI alone in cash-backed growth companies is a known false positive."),
+            ("DEPI", "Depreciation Index",              1.00,  "Slowing depreciation rate — suggests useful life extension to boost reported earnings"),
+            ("SGAI", "SG&A Expense Index",              1.00,  "SG&A expenses growing faster than revenue — overhead inflation signal"),
+            ("LVGI", "Leverage Index",                  1.00,  "Total leverage increasing relative to assets — rising debt pressure"),
+            ("TATA", "Total Accruals to Total Assets",  0.05,  "(Net Income − Operating Cash Flow) / Total Assets — the strongest single manipulation signal. Negative TATA means CFO exceeds Net Income (cash-backed earnings)."),
         ]
         
         for abbrev, name, default_threshold, description in beneish_var_defs:
@@ -195,12 +197,42 @@ class Section6Writer:
                 labels=years,
                 datasets=[
                     {"label": "M-Score", "data": scores, "color": "#EF4444"},
-                    {"label": "Threshold (-1.78)", "data": [-1.78] * len(years), "color": "#94A3B8"},
+                    {"label": "High-Risk Threshold (-1.78)", "data": [-1.78] * len(years), "color": "#F97316"},
+                    {"label": "Warning Threshold (-2.22)", "data": [-2.22] * len(years), "color": "#94A3B8"},
                 ],
                 title="Beneish M-Score Historical Trend",
                 y_label="M-Score (lower = safer)",
                 height="300px",
             )
+
+        # Build note/warning box (hypergrowth false-positive, persistence)
+        note_text = latest.get("note", "")
+        note_html = ""
+        if note_text:
+            is_fp = "HYPERGROWTH FALSE-POSITIVE WARNING" in note_text
+            is_persistent = "PERSISTENT:" in note_text or "RECURRING:" in note_text
+            if is_fp:
+                # Extract the FP note
+                fp_start = note_text.find("HYPERGROWTH FALSE-POSITIVE WARNING")
+                fp_msg = note_text[fp_start:].split("|")[0].strip()
+                note_html = f"""
+                <div class="callout callout-warning" style="margin-top:12px; border-left: 4px solid #F97316;">
+                    <p><strong>⚡ Hypergrowth False-Positive Detected</strong></p>
+                    <p>{fp_msg}</p>
+                    <p class="text-small text-secondary">Per Beneish (1999) research: when SGI drives the M-Score but TATA is negative (CFO &gt; Net Income), the manipulation signal is very likely a false positive from genuine revenue acceleration rather than accounting fraud.</p>
+                </div>
+                """
+            elif is_persistent:
+                persist_start = note_text.rfind("| ") + 2
+                persist_msg = note_text[persist_start:].strip() if persist_start > 1 else ""
+                if persist_msg:
+                    note_html = f"""
+                    <div class="callout callout-danger" style="margin-top:12px;">
+                        <p><strong>🔁 Multi-Year Persistence Alert</strong></p>
+                        <p>{persist_msg}</p>
+                        <p class="text-small text-secondary">Academic best practice: sustained LIKELY_MANIPULATOR verdicts across 3+ year-pairs are a stronger signal than any single year.</p>
+                    </div>
+                    """
 
         return f"""
         <h3>Beneish M-Score (Earnings Manipulation Detection)</h3>
@@ -222,11 +254,13 @@ class Section6Writer:
 
         <div class="{callout_class} callout" style="margin-top:16px;">
             <p><strong>Interpretation:</strong>
-            {"An M-Score above -1.78 suggests a statistically elevated probability of earnings manipulation. Further investigation into accounting practices is strongly recommended." if verdict == "LIKELY_MANIPULATOR" else
-             "The M-Score falls in the grey zone (-2.22 to -1.78), indicating inconclusive results. Some financial metrics warrant additional scrutiny." if verdict == "GREY_ZONE" else
-             "The M-Score is well below -1.78, indicating a low statistical probability of earnings manipulation based on the 8-variable model."}
+            {"An M-Score above −1.78 (8-variable model, Beneish 1999) suggests a statistically elevated probability of earnings manipulation. The grey zone is −2.22 to −1.78; scores above −1.78 represent the high-risk threshold. Further investigation into accounting practices is strongly recommended." if verdict == "LIKELY_MANIPULATOR" else
+             "The M-Score falls in the grey zone (between −2.22 and −1.78 per Beneish 1999 8-variable model). This is an ambiguous result — some financial metrics warrant additional scrutiny, but the signal is not definitive." if verdict == "GREY_ZONE" else
+             "The M-Score is well below −2.22 (the 8-variable model's primary threshold from Beneish 1999), indicating a low statistical probability of earnings manipulation."}
             </p>
         </div>
+
+        {note_html}
 
         <h4>8-Variable Component Breakdown</h4>
         <div class="table-container">

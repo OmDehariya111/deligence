@@ -2,9 +2,11 @@
 Module:  module1_named_competitors.py
 Agent:   Market Intelligence Agent
 Purpose: Identify 5-7 strategically relevant named competitors through a
-         three-step pipeline: ChromaDB RAG extraction (List A), sector
-         benchmark peers (List B), and intelligent merge with MCP-based
-         ticker resolution.
+         multi-step pipeline:
+         1. LLM-based real-world competitor identification (PRIMARY)
+         2. ChromaDB RAG extraction for enrichment (SECONDARY)
+         3. Sector benchmark peers as fallback (TERTIARY)
+         4. Intelligent merge with SEC ticker resolution
 Inputs:  MarketIntelContext (context object with peers, ratios, ChromaDB flag).
 Outputs: Writes to `named_competitors` SQLite table.
 """
@@ -14,6 +16,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 import chromadb
 from litellm import completion
@@ -62,12 +65,15 @@ def get_named_competitors_table(metadata: MetaData) -> Table:
 # ---------------------------------------------------------------------------
 class NamedCompetitorIdentifier:
     """Identifies 5-7 strategically relevant named competitors.
-    # Ye main class hai jo saare kaam ko 3 step me karegi: 
-    # 1. RAG (Filings se naam nikalna), 2. Benchmark peers nikalna, 3. Dono ko merge karna.
+    
+    Pipeline:
+    1. LLM Knowledge — Ask AI for real-world competitors (PRIMARY SOURCE)
+    2. ChromaDB RAG — Extract competitor mentions from 10-K filings (ENRICHMENT)
+    3. Sector Benchmark Peers — Use Analysis Agent's peer list (FALLBACK)
+    4. Intelligent Merge — Combine all sources with priority ranking
     """
 
     # ChromaDB search queries targeting competitor mentions in 10-K Item 1
-    # Hum target company ki Annual Report (10-K) me in 5 questions (queries) se competitors dhoondhte hain.
     _RAG_QUERIES = [
         "our main competitors are",
         "we compete with",
@@ -86,7 +92,66 @@ class NamedCompetitorIdentifier:
         )
 
     # ------------------------------------------------------------------
-    # Step 1 — ChromaDB RAG extraction
+    # Step 0 — LLM-based competitor identification (NEW PRIMARY SOURCE)
+    # ------------------------------------------------------------------
+    def _step0_llm_competitors(self) -> list[dict]:
+        """Ask LLM to identify real-world competitors for the target company.
+        
+        Returns:
+            List of dicts with keys: name, reason
+            
+        # Ye step LLM (Gemini) se seedha puuchta hai ki is company ke 
+        # real-world competitors kaun hain jo SEC me registered hain.
+        """
+        model_name = os.environ.get("LLM_MODEL_NAME_TIER1", "vertex_ai/gemini-2.5-flash")
+        
+        prompt = (
+            f"You are a senior equity research analyst. For {self.context.company_name} "
+            f"(ticker: {self.context.ticker}, SIC: {self.context.sic_code}, "
+            f"industry: {self.context.industry_name}), identify the top 7 direct business "
+            f"competitors that are:\n"
+            f"1. Publicly traded in the US\n"
+            f"2. Registered with the SEC (have CIK numbers and file 10-K reports)\n"
+            f"3. Competing in the same core product/service markets\n"
+            f"4. Relevant for institutional-grade competitive analysis\n\n"
+            f"Use EXACT legal names as registered with the SEC "
+            f"(e.g. 'MICROSOFT CORP' not 'Microsoft', 'ALPHABET INC' not 'Google').\n"
+            f"Do NOT include {self.context.ticker} ({self.context.company_name}) itself.\n\n"
+            f"Return ONLY a valid JSON array of objects:\n"
+            f'[{{"name": "MICROSOFT CORP", "reason": "Competes in consumer electronics and cloud"}}]\n'
+            f"No markdown formatting, no explanations outside the JSON."
+        )
+        
+        try:
+            response = completion(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_text = response.choices[0].message.content
+            result = parse_llm_json_response(raw_text, default=[])
+            
+            if isinstance(result, list):
+                valid = []
+                for item in result:
+                    if isinstance(item, dict) and item.get("name"):
+                        valid.append({
+                            "name": item["name"].strip(),
+                            "reason": item.get("reason", "LLM-identified competitor")
+                        })
+                    elif isinstance(item, str) and item.strip():
+                        valid.append({
+                            "name": item.strip(),
+                            "reason": "LLM-identified competitor"
+                        })
+                logger.info(f"LLM identified {len(valid)} competitors: {[v['name'] for v in valid]}")
+                return valid
+            return []
+        except Exception as e:
+            logger.error(f"LLM competitor identification failed: {e}")
+            return []
+
+    # ------------------------------------------------------------------
+    # Step 1 — ChromaDB RAG extraction (now ENRICHMENT, not primary)
     # ------------------------------------------------------------------
     def _step1_chromadb_extraction(self) -> list[str]:
         """Query ChromaDB for competitor names mentioned in 10-K Item 1.
@@ -96,7 +161,7 @@ class NamedCompetitorIdentifier:
         # Ye step ChromaDB me report padhta hai, wahan se chunk nikalta hai aur LLM se puchta hai.
         """
         if not self.context.is_chromadb_reachable:
-            logger.info("ChromaDB unreachable — skipping Step 1 RAG extraction.")
+            logger.info("ChromaDB unreachable — skipping RAG extraction.")
             return []
 
         # Build collection name (lowercase, hyphens, max 63 chars)
@@ -113,7 +178,7 @@ class NamedCompetitorIdentifier:
             logger.warning("Could not open ChromaDB collection '%s': %s", collection_name, e)
             return []
 
-        # ChromaDB where filter: Hame sirf Target Ticker ki latest 10-K ka Item 1 chahiye
+        # ChromaDB where filter: sirf Target Ticker ki latest 10-K ka Item 1 chahiye
         where_filter = {
             "$and": [
                 {"ticker": self.context.ticker},
@@ -125,7 +190,6 @@ class NamedCompetitorIdentifier:
 
         all_chunks: list[str] = []
 
-        # Humare paas jo 5 RAG queries hain unko ek ek karke run karte hain
         for query_text in self._RAG_QUERIES:
             try:
                 results = collection.query(
@@ -143,10 +207,10 @@ class NamedCompetitorIdentifier:
             logger.info("No ChromaDB chunks retrieved for competitor extraction.")
             return []
 
-        # Store chunks for Step 1B verification (verification step ke liye save kar rakha hai)
+        # Store chunks for verification
         self._retrieved_chunk_text = "\n".join(all_chunks)
 
-        # Duplicates remove karte hain taaki AI ko clear context mile
+        # Duplicates remove karte hain
         seen: set[str] = set()
         unique_chunks: list[str] = []
         for chunk in all_chunks:
@@ -157,7 +221,6 @@ class NamedCompetitorIdentifier:
 
         concatenated = "\n---\n".join(unique_chunks)
 
-        # Ye wo prompt hai jo LLM ko bheja jaayega taaki wo sirf JSON format me names de sake.
         prompt = (
             "Act as a strict financial data extraction algorithm. Review the provided SEC 10-K excerpts. "
             "Identify direct named competitors, peers, or companies in the same industry mentioned by the target. "
@@ -167,9 +230,6 @@ class NamedCompetitorIdentifier:
             f"{concatenated}"
         )
 
-        # -- BUG 1 FIXED: LLM Hardcoding Removed --
-        # Ab hum directly Google Vertex AI (Gemini) call karte hain using environment variables.
-        # Credentials backend me Litellm automatically 'deligenx.json' se fetch kar lega.
         model_name = os.environ.get("LLM_MODEL_NAME_TIER1", "vertex_ai/gemini-2.5-flash")
         try:
             response = completion(
@@ -177,7 +237,6 @@ class NamedCompetitorIdentifier:
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = response.choices[0].message.content
-            # parse_llm_json_response ek utility hai jo json block padhke python list me badal deti hai
             names = parse_llm_json_response(raw_text, default=[])
             if isinstance(names, list):
                 return [n.strip() for n in names if isinstance(n, str) and n.strip()]
@@ -187,42 +246,31 @@ class NamedCompetitorIdentifier:
             return []
 
     # ------------------------------------------------------------------
-    # Step 1B (Fix M-4) — Verification against retrieved text
+    # Step 1B — Verification against retrieved text
     # ------------------------------------------------------------------
     def _step1b_verify(self, raw_names: list[str]) -> list[str]:
-        """Verify each name from List A actually appears in the retrieved
-        ChromaDB chunk text. Also tries a shortened form with corporate
-        suffixes removed.
-
-        Returns:
-            Verified subset of raw_names.
-            
-        # Is function me hum LLM ke diye hue naam ko verify karte hain ki wo original text me
-        # mojud tha ya AI ne apni taraf se bana diya (hallucination roka jata hai yaha).
+        """Verify each name from RAG list actually appears in the retrieved text.
+        # Hallucination roka jaata hai yahan.
         """
         if not raw_names:
             return []
 
         chunk_text_lower = getattr(self, "_retrieved_chunk_text", "").lower()
         if not chunk_text_lower:
-            # Agar text hi nahi hai compare karne ke liye toh skip karo
             return raw_names
 
         verified: list[str] = []
         for name in raw_names:
             name_lower = name.lower()
-            # Agar exact string match mil gaya
             if name_lower in chunk_text_lower:
                 verified.append(name)
                 continue
 
-            # Agar company ke naam ke peeche se 'Inc.' wagera hata ke match karein
             short = _CORP_SUFFIXES.sub("", name).strip()
             if short and short.lower() != name_lower and short.lower() in chunk_text_lower:
                 verified.append(name)
                 continue
 
-            # Agar dono tariko se nahi mila, toh matlab LLM ne galat predict kiya, isliye drop kar diya.
             logger.debug("Competitor name '%s' not verified in chunk text — dropped.", name)
 
         logger.info(
@@ -236,11 +284,7 @@ class NamedCompetitorIdentifier:
     # Step 2 — List B from sector benchmark peers
     # ------------------------------------------------------------------
     def _step2_sector_peers(self) -> list[dict]:
-        """Build List B from context.top_peers.
-
-        Returns:
-            List of dicts with keys: cik, entity_name, revenue.
-            
+        """Build fallback list from context.top_peers.
         # Ye step Analysis Agent ke Sector benchmark ke output se companies nikalta hai.
         """
         if self.context.is_sector_benchmark_partial:
@@ -250,7 +294,7 @@ class NamedCompetitorIdentifier:
         if not peers:
             return []
 
-        # Pehle hum Target Company ki revenue dhoondhte hain taaki choti companies ko filter kiya ja sake.
+        # Target Company ki revenue dhoondhte hain
         target_revenue: float | None = None
         for r_name in ["gross_margin", "operating_margin", "net_profit_margin", "ebitda_margin"]:
             ratio_obj = self.context.target_ratios.get(r_name)
@@ -260,14 +304,13 @@ class NamedCompetitorIdentifier:
                     target_revenue = inputs.get("revenue")
                     break
 
-        # CIK match karke khud (Target company) ko ignore karte hain.
+        # CIK match karke khud ko ignore karte hain
         target_cik = self.context.cik.lstrip("0")
         filtered: list[dict] = []
         for p in peers:
             peer_cik = p.cik.lstrip("0")
             if peer_cik == target_cik:
                 continue
-            # Revenue floor: Agar peer ki revenue target ki 5% se kam hai toh ignore karo.
             if target_revenue and target_revenue > 0 and p.revenue < (target_revenue * 0.05):
                 continue
             filtered.append({
@@ -276,29 +319,20 @@ class NamedCompetitorIdentifier:
                 "revenue": p.revenue,
             })
 
-        # Sabse zyaada revenue waali top 10 companies ko list me rakh lete hain.
         filtered.sort(key=lambda x: x["revenue"], reverse=True)
         return filtered[:10]
 
     # ------------------------------------------------------------------
-    # Step 3 — Intelligent merge
+    # Ticker Resolution (shared utility)
     # ------------------------------------------------------------------
     def _resolve_tickers(self, names: list[str]) -> dict[str, dict]:
-        """Resolve List A company names to tickers/CIKs via MCP
-        get_company_tickers().
-
-        Returns:
-            Dict mapping original name → {ticker, cik, entity_name}
-            for resolved names.
-            
-        # LLM ne humein sirf Companies ke naam diye the (jaise "Oracle"), ye tool
-        # un naamo ko actual SEC tickers (jaise "ORCL") se match karne me help karta hai.
+        """Resolve company names to tickers/CIKs via MCP get_company_tickers().
+        # LLM ke diye hue naam ko actual SEC tickers se match karta hai.
         """
         if not names:
             return {}
 
         try:
-            # MCP ko call karke SEC ki master ticker file mangwate hain.
             tickers_data = call_mcp_tool_sync(
                 "mcp_servers/sec_edgar_server.py",
                 "get_company_tickers",
@@ -312,7 +346,6 @@ class NamedCompetitorIdentifier:
         if isinstance(tickers_data, dict):
             mapping = tickers_data.get("mapping", tickers_data)
 
-        # Dictionary banate hain search karne me aasani ho isliye
         entity_lookup: list[tuple[str, str, str]] = []
         if mapping:
             first_val = next(iter(mapping.values()))
@@ -336,7 +369,7 @@ class NamedCompetitorIdentifier:
 
             best_match: tuple[str, str, str] | None = None
 
-            # Pass 1: Pehle check karte hain exact name match ya exact ticker match hota hai kya.
+            # Pass 1: Exact match
             for ticker_key, entity_name, cik_str in entity_lookup:
                 tk_lower = ticker_key.lower()
                 ent_lower = entity_name.lower()
@@ -344,7 +377,7 @@ class NamedCompetitorIdentifier:
                     best_match = (ticker_key, entity_name, cik_str)
                     break
 
-            # Pass 2: Agar exact match nahi mila, toh substring check karte hain (Jaise "Oracle" inside "Oracle Corporation")
+            # Pass 2: Substring match
             if not best_match:
                 for ticker_key, entity_name, cik_str in entity_lookup:
                     ent_lower = entity_name.lower()
@@ -355,7 +388,6 @@ class NamedCompetitorIdentifier:
                         best_match = (ticker_key, entity_name, cik_str)
                         break
 
-            # Jo match hua use resolved dictionary me save kar lete hain
             if best_match:
                 resolved[name] = {
                     "ticker": best_match[0],
@@ -368,97 +400,91 @@ class NamedCompetitorIdentifier:
         )
         return resolved
 
+    # ------------------------------------------------------------------
+    # Step 3 — Intelligent merge (updated priorities)
+    # ------------------------------------------------------------------
     def _step3_merge(
         self,
-        list_a: list[str],
-        list_b: list[dict],
+        llm_competitors: list[dict],
+        rag_list: list[str],
+        benchmark_peers: list[dict],
     ) -> list[dict]:
-        """Intelligently merge List A (RAG) and List B (benchmark peers).
+        """Intelligently merge all competitor sources with priority ranking.
 
-        Priority 1: In both A and B (matched by CIK)
-        Priority 2: In A only (with resolved ticker)
-        Priority 3: In B only
+        Priority 1: LLM-identified competitors (highest quality)
+        Priority 2: RAG-extracted names verified in 10-K text
+        Priority 3: Sector benchmark peers (fallback)
 
         Returns:
             Final list of competitor dicts for DB insertion (max 7).
-            
-        # Is step me hum Filing ke competitors aur Database (Industry) ke competitors
-        # ko mila kar best 7 competitors choose karte hain based on priority.
         """
-        # Step 1 waalo ka ticker resolve karte hain
-        resolved_a = self._resolve_tickers(list_a)
-
-        # Step 2 waalo ko CIK id ke basis pe dictionary me dalte hain
+        # Resolve LLM competitor names to SEC tickers
+        llm_names = [c["name"] for c in llm_competitors]
+        resolved_llm = self._resolve_tickers(llm_names)
+        
+        # Resolve RAG names to SEC tickers
+        resolved_rag = self._resolve_tickers(rag_list)
+        
+        # Build CIK set from benchmark peers
         list_b_by_cik: dict[str, dict] = {}
-        for peer in list_b:
+        for peer in benchmark_peers:
             cik_norm = peer["cik"].lstrip("0")
             list_b_by_cik[cik_norm] = peer
 
-        priority_1: list[dict] = []  # Jo dono me mile
-        priority_2: list[dict] = []  # Jo sirf RAG se mile
-        priority_3: list[dict] = []  # Jo sirf Benchmark (SEC Sector) se mile
+        priority_1: list[dict] = []  # LLM-identified (best quality)
+        priority_2: list[dict] = []  # RAG-only (from 10-K filings)
+        priority_3: list[dict] = []  # Benchmark-only (SEC sector peers)
 
-        # Dupes (duplicate companies) rokne ke liye ek set maintain karte hain
-        used_ciks: set[str] = set()
         used_tickers: set[str] = set()
 
-        # Pehle unhe process karte hain jo List A (Report) me mojud they
-        for name in list_a:
-            info = resolved_a.get(name)
+        # --- Process LLM competitors (Priority 1) ---
+        for comp in llm_competitors:
+            info = resolved_llm.get(comp["name"])
             if not info:
                 continue
 
             ticker = info["ticker"]
             if ticker.upper() == self.context.ticker.upper():
-                continue  # Khud ki company ko competitors me mat dalo
+                continue
             if ticker in used_tickers:
                 continue
 
-            # Dekhte hain kya ye competitor List B me bhi hai?
-            matched_peer: dict | None = None
-            for cik_key, peer in list_b_by_cik.items():
-                peer_name_lower = peer["entity_name"].lower()
-                resolved_name_lower = info["entity_name"].lower()
-                if (
-                    peer_name_lower == resolved_name_lower
-                    or peer_name_lower in resolved_name_lower
-                    or resolved_name_lower in peer_name_lower
-                ):
-                    matched_peer = peer
-                    break
+            priority_1.append({
+                "ticker": ticker,
+                "company_name": info["entity_name"],
+                "cik": info.get("cik", ""),
+                "market_cap_usd": None,
+                "why_selected": comp.get("reason", "LLM-identified real-world competitor"),
+                "selection_method": "PRIORITY_1_LLM",
+            })
+            used_tickers.add(ticker)
 
-            if matched_peer:
-                # Agar dono me mila, toh wo priority 1 me jayega (Highest Priority).
-                cik_norm = matched_peer["cik"].lstrip("0")
-                priority_1.append({
-                    "ticker": ticker,
-                    "company_name": info["entity_name"],
-                    "cik": matched_peer["cik"],
-                    "market_cap_usd": None,
-                    "why_selected": "Mentioned in 10-K filings AND appears in sector benchmark peers.",
-                    "selection_method": "PRIORITY_1_BOTH",
-                })
-                used_ciks.add(cik_norm)
-                used_tickers.add(ticker)
-            else:
-                # Agar sirf report me mila, par List B me nahi
-                priority_2.append({
-                    "ticker": ticker,
-                    "company_name": info["entity_name"],
-                    "cik": info.get("cik", ""),
-                    "market_cap_usd": None,
-                    "why_selected": f"Mentioned as competitor in 10-K filings (originally: '{name}').",
-                    "selection_method": "PRIORITY_2_RAG_ONLY",
-                })
-                used_tickers.add(ticker)
-
-        # Ab jo List B (Sector) ki companies bach gayi unhe (Priority 3) me dalte hain
-        for peer in list_b:
-            cik_norm = peer["cik"].lstrip("0")
-            if cik_norm in used_ciks:
+        # --- Process RAG names (Priority 2) ---
+        for name in rag_list:
+            info = resolved_rag.get(name)
+            if not info:
                 continue
 
-            # Unka ticker pata karne ki koshish
+            ticker = info["ticker"]
+            if ticker.upper() == self.context.ticker.upper():
+                continue
+            if ticker in used_tickers:
+                continue
+
+            priority_2.append({
+                "ticker": ticker,
+                "company_name": info["entity_name"],
+                "cik": info.get("cik", ""),
+                "market_cap_usd": None,
+                "why_selected": f"Mentioned as competitor in 10-K filings (originally: '{name}').",
+                "selection_method": "PRIORITY_2_RAG",
+            })
+            used_tickers.add(ticker)
+
+        # --- Process Benchmark peers (Priority 3 - fallback) ---
+        for peer in benchmark_peers:
+            cik_norm = peer["cik"].lstrip("0")
+
             peer_resolved = self._resolve_tickers([peer["entity_name"]])
             peer_info = peer_resolved.get(peer["entity_name"])
             ticker = peer_info["ticker"] if peer_info else f"CIK_{peer['cik']}"
@@ -474,17 +500,16 @@ class NamedCompetitorIdentifier:
                 "cik": peer["cik"],
                 "market_cap_usd": None,
                 "why_selected": f"SEC sector peer (SIC {self.context.sic_code}) with revenue ${peer['revenue']:,.0f}.",
-                "selection_method": "PRIORITY_3_BENCHMARK_ONLY",
+                "selection_method": "PRIORITY_3_BENCHMARK",
             })
-            used_ciks.add(cik_norm)
             used_tickers.add(ticker)
 
-        # Teeno priorities ko mila kar top 7 competitors ko filter kar lete hain
+        # Combine all priorities, cap at 7
         final = priority_1 + priority_2 + priority_3
         final = final[:7]
 
         logger.info(
-            "Merge result: P1=%d, P2=%d, P3=%d → final=%d competitors.",
+            "Merge result: P1_LLM=%d, P2_RAG=%d, P3_BENCH=%d → final=%d competitors.",
             len(priority_1),
             len(priority_2),
             len(priority_3),
@@ -498,30 +523,32 @@ class NamedCompetitorIdentifier:
     def run(self) -> None:
         """Execute the full named-competitor identification pipeline."""
         
-        # --- BUG 2 FIXED: NEW AUDIT LOGGING STANDARD ---
-        # Ab hum 'utils.audit_logger' ki wajah se 'STARTED' log standard tarike se bhejte hain.
         log_audit_event(
             audit_log_path=self.paths["AUDIT_LOG_PATH"],
             agent="MarketIntelligenceAgent",
             module="MODULE_1_NAMED_COMPETITORS",
             status="STARTED",
-            summary="Beginning Named Competitor Identification (RAG + Benchmark Merge)."
+            summary="Beginning Named Competitor Identification (LLM + RAG + Benchmark Merge)."
         )
 
-        # Step 1 — ChromaDB RAG extraction
+        # Step 0 — LLM-based competitor identification (PRIMARY)
+        llm_competitors = self._step0_llm_competitors()
+        logger.info("Step 0 LLM competitors: %d identified.", len(llm_competitors))
+
+        # Step 1 — ChromaDB RAG extraction (ENRICHMENT)
         raw_list_a = self._step1_chromadb_extraction()
-        logger.info("Step 1 raw List A: %d names extracted.", len(raw_list_a))
+        logger.info("Step 1 raw RAG List: %d names extracted.", len(raw_list_a))
 
-        # Step 1B — Verification (Fix M-4)
-        verified_list_a = self._step1b_verify(raw_list_a)
-        logger.info("Step 1B verified List A: %d names.", len(verified_list_a))
+        # Step 1B — Verification
+        verified_rag = self._step1b_verify(raw_list_a)
+        logger.info("Step 1B verified RAG: %d names.", len(verified_rag))
 
-        # Step 2 — Sector benchmark peers (List B)
-        list_b = self._step2_sector_peers()
-        logger.info("Step 2 List B: %d sector peers.", len(list_b))
+        # Step 2 — Sector benchmark peers (FALLBACK)
+        benchmark_peers = self._step2_sector_peers()
+        logger.info("Step 2 Benchmark peers: %d sector peers.", len(benchmark_peers))
 
-        # Step 3 — Intelligent merge
-        final_competitors = self._step3_merge(verified_list_a, list_b)
+        # Step 3 — Intelligent merge with priority ranking
+        final_competitors = self._step3_merge(llm_competitors, verified_rag, benchmark_peers)
 
         # Database (SQLite) me competitors save karte hain
         if final_competitors:
@@ -539,24 +566,24 @@ class NamedCompetitorIdentifier:
                 for comp in final_competitors:
                     conn.execute(text(insert_sql), comp)
 
-        # Dekhte hain successful kitne competitors mile taaki descriptive log likha ja sake
         count = len(final_competitors)
+        p1_count = sum(1 for c in final_competitors if c["selection_method"] == "PRIORITY_1_LLM")
+        
         if count >= 5:
             status = "COMPLETED"
-            summary = f"Identified {count} named competitors (target 5-7). Methods used: RAG + SEC Peers."
+            summary = f"Identified {count} named competitors (target 5-7). LLM: {p1_count}, RAG+Benchmark: {count - p1_count}."
         elif count > 0:
             status = "COMPLETED"
             summary = (
                 f"Identified only {count} competitors (target 5-7). "
-                f"Fallback applied due to limited data. Sources: RAG ({len(verified_list_a)}), Peers ({len(list_b)})."
+                f"LLM: {p1_count}, RAG: {len(verified_rag)}, Benchmark: {len(benchmark_peers)}."
             )
         else:
             status = "COMPLETED"
-            summary = "No competitors identified — both RAG (0) and SEC benchmark (0) sources yielded no results."
+            summary = "No competitors identified — LLM, RAG, and benchmark sources all yielded no results."
 
         self.db_manager.dispose()
         
-        # 'COMPLETED' (ya PARTIAL) status same module name ke saath, taaki time calculate ho jaye
         log_audit_event(
             audit_log_path=self.paths["AUDIT_LOG_PATH"],
             agent="MarketIntelligenceAgent",

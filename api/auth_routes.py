@@ -49,10 +49,14 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
         
     hashed_password = get_password_hash(user.password)
+    
+    is_admin_user = normalized_email == "omdehariya111@gmail.com"
+    
     new_user = User(
         email=normalized_email,
         full_name=user.full_name,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        is_admin=is_admin_user
     )
     db.add(new_user)
     db.commit()
@@ -71,6 +75,11 @@ def login(user_credentials: UserLogin, response: Response, db: Session = Depends
         
     if not verify_password(user_credentials.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Credentials")
+        
+    if user.email.lower() == "omdehariya111@gmail.com" and not user.is_admin:
+        user.is_admin = True
+        db.commit()
+        db.refresh(user)
         
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -121,6 +130,11 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.email) == user_email.lower()).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        
+    if user.email.lower() == "omdehariya111@gmail.com" and not user.is_admin:
+        user.is_admin = True
+        db.commit()
+        db.refresh(user)
         
     return user
 

@@ -265,23 +265,69 @@ class DealBreakerDetector:
                 self._add_flag("GOING_CONCERN", 1, "FULL", f"Going concern triggered (ChromaDB: {gc_chroma}, Altman: {altman_zone})")
             else:
                 self._add_flag("GOING_CONCERN", 0, "FULL", "No going concern signals.")
-
         # DB2: EARNINGS_MANIPULATION
-        # Ye financial_data table se "Beneish M-Score" uthata hai aur check karta hai ki agar score 'LIKELY_MANIPULATOR' 
-        # hai aur sath me 2 ya usse zyada anomalies hain, toh company fraud kar rahi hai.
+        # Upgraded logic based on Beneish (1999) research best practices:
+        # 1. PERSISTENCE is the key signal — a single LIKELY_MANIPULATOR year can be a fluke,
+        #    but 3+ consecutive years indicate systemic aggressive accounting.
+        # 2. TATA is the strongest individual indicator (non-cash earnings).
+        # 3. Hypergrowth False Positive: if the note contains our FP warning, the SGI-driven
+        #    flag is very likely benign and should NOT trigger the deal breaker.
         beneish = analysis_data.get("beneish_m_score", {})
-        ben_status = beneish.get("status", "UNKNOWN")
-        ben_verdict = beneish.get("verdict", "")
+        ben_status = beneish.get("status", "COMPUTED")  # legacy field
+        ben_verdict = beneish.get("verdict", "UNKNOWN")
         
-        if ben_status == "NOT_COMPUTABLE":
+        if ben_verdict in ("NOT_COMPUTABLE", "UNKNOWN") and not beneish:
             self._add_flag("EARNINGS_MANIPULATION", 0, "FULL", "Beneish M-Score not computable — insufficient fiscal year history.")
         else:
+            likely_count = beneish.get("likely_count", 1 if ben_verdict == "LIKELY_MANIPULATOR" else 0)
+            grey_count = beneish.get("grey_count", 0)
+            total_computed = beneish.get("total_computed", 1)
+            latest_m_score = beneish.get("m_score") or 0
+            latest_flags = beneish.get("individual_flags", [])
+            latest_note = beneish.get("note", "")
+            
+            # Check if the latest verdict is a hypergrowth false positive
+            is_hypergrowth_fp = "HYPERGROWTH FALSE-POSITIVE WARNING" in latest_note
+            
+            # Check if TATA is flagged in latest year (strongest manipulation signal)
+            tata_flagged = any("TATA" in f for f in latest_flags)
+            
+            # Anomaly overlay (secondary signal)
             anomalies = analysis_data.get("anomaly_flags_list", [])
             high_anomalies = sum(1 for a in anomalies if a.get("severity") in ["HIGH", "CRITICAL"])
-            if ben_verdict == "LIKELY_MANIPULATOR" and high_anomalies >= 2:
-                self._add_flag("EARNINGS_MANIPULATION", 1, "FULL", f"Beneish LIKELY_MANIPULATOR with {high_anomalies} high/critical anomalies.")
+            
+            # Tier 1 (DEAL BREAKER → AVOID): 
+            # Persistent LIKELY_MANIPULATOR for 3+ year-pairs AND TATA flagged (cash not backing earnings)
+            # This is a genuine manipulation signal, not a growth artifact
+            if likely_count >= 3 and tata_flagged and not is_hypergrowth_fp:
+                self._add_flag("EARNINGS_MANIPULATION", 1, "FULL",
+                    f"PERSISTENT earnings manipulation signal: LIKELY_MANIPULATOR in {likely_count}/{total_computed} year-pairs "
+                    f"WITH TATA flagged (accruals exceed threshold). Sustained non-cash earnings pattern detected.")
+            
+            # Tier 2 (DEAL BREAKER → ENHANCED_DD):
+            # Persistent LIKELY_MANIPULATOR for 2+ years, regardless of anomalies
+            # OR: Latest year LIKELY + TATA flagged (current year earnings clearly non-cash backed)
+            elif (likely_count >= 2 and not is_hypergrowth_fp) or (ben_verdict == "LIKELY_MANIPULATOR" and tata_flagged and not is_hypergrowth_fp):
+                reason = (
+                    f"Recurring LIKELY_MANIPULATOR in {likely_count}/{total_computed} year-pairs." 
+                    if likely_count >= 2 
+                    else f"LIKELY_MANIPULATOR (M-Score={latest_m_score}) with TATA flagged — earnings not fully cash-backed."
+                )
+                self._add_flag("EARNINGS_MANIPULATION", 1, "FULL", reason)
+            
+            # Tier 3 (MONITOR — no deal breaker):
+            # Hypergrowth false positive detected by Module 3
+            elif is_hypergrowth_fp:
+                self._add_flag("EARNINGS_MANIPULATION", 0, "FULL",
+                    f"LIKELY_MANIPULATOR verdict ({likely_count}/{total_computed} year-pairs) but HYPERGROWTH "
+                    f"FALSE-POSITIVE detected: SGI-driven score with negative TATA (CFO>NI = cash-backed growth). "
+                    f"Not escalated per Beneish (1999) research guidelines. Qualitative review recommended.")
+            
+            # No signal
             else:
-                self._add_flag("EARNINGS_MANIPULATION", 0, "FULL", "No material earnings manipulation signal.")
+                self._add_flag("EARNINGS_MANIPULATION", 0, "FULL",
+                    f"No material earnings manipulation signal. Beneish verdict: {ben_verdict} "
+                    f"(M-Score={latest_m_score}, {likely_count}/{total_computed} years flagged LIKELY).")
                 
         # DB3: ACTIVE_SEC_FRAUD
         # Ye dekhta hai ki kya SEC (Government) ne koi fraud investigation (probe) bitha di hai.

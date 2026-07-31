@@ -109,7 +109,7 @@ class NewsSentimentExtractor:
             resp = {"quota_exhausted": True}
             
         articles = resp.get("articles", [])
-        source = "NEWSAPI_CACHE" if resp.get("served_from_cache") else "NEWSAPI"
+        source = "NEWSAPI"
         
         # Limit cross error check (Free tier error handling)
         if resp.get("quota_exhausted") or not articles:

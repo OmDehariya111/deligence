@@ -31,10 +31,10 @@ export function FinalCta() {
         </h2>
         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
           <Link
-            href="/demo"
+            href="/dashboard"
             className="group inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground neon-glow transition-all duration-200 hover:brightness-110"
           >
-            Generate Your First Report
+            Launch Platform
             <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
           </Link>
         </motion.div>

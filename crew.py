@@ -125,7 +125,8 @@ class DeligenXCrew:
             tools=[run_full_ingestion_pipeline_tool],
             llm=nvidia_llm,
             verbose=False,
-            allow_delegation=False
+            allow_delegation=False,
+            max_iter=1
         )
         ingestion_task = Task(
             description=f"For the company '{self.ticker}' with run_id '{self.run_id}', use your ONLY tool passing ticker='{self.ticker}' and run_id='{self.run_id}'{user_file_argument}. Do not omit user_file_path when it is provided.",
@@ -143,7 +144,8 @@ class DeligenXCrew:
             tools=[run_analysis_pipeline_tool],
             llm=nvidia_llm,
             verbose=False,
-            allow_delegation=False
+            allow_delegation=False,
+            max_iter=1
         )
         analysis_task = Task(
             description=f"Execute the analysis pipeline for {self.ticker} with run_id {self.run_id}. The output of the Ingestion Agent is provided in your context. You MUST pass that exact JSON string into the 'ingestion_summary_json' argument of the run_analysis_pipeline tool.",
@@ -160,7 +162,8 @@ class DeligenXCrew:
             tools=[run_market_intelligence_pipeline_tool],
             llm=nvidia_llm,
             verbose=False,
-            allow_delegation=False
+            allow_delegation=False,
+            max_iter=1
         )
         mi_task = Task(
             description=f"Execute the market intelligence pipeline for {self.ticker} with run_id {self.run_id}. The output of the Analysis Agent is provided in your context. You MUST pass that exact JSON string into the 'analysis_summary_json' argument of your tool.",
@@ -177,7 +180,8 @@ class DeligenXCrew:
             tools=[run_risk_assessment_pipeline_tool],
             llm=nvidia_llm,
             verbose=False,
-            allow_delegation=False
+            allow_delegation=False,
+            max_iter=1
         )
         risk_task = Task(
             description=f"Execute the risk assessment pipeline for {self.ticker} with run_id {self.run_id}. The output of the Market Intelligence Agent is provided in your context. You MUST pass that exact JSON string into the 'mi_summary_json' argument of your tool.",
@@ -194,7 +198,8 @@ class DeligenXCrew:
             tools=[run_memo_generation_pipeline_tool],
             llm=nvidia_llm,
             verbose=False,
-            allow_delegation=False
+            allow_delegation=False,
+            max_iter=1
         )
         memo_task = Task(
             description=f"Execute the memo generation pipeline for {self.ticker} with run_id {self.run_id}. The output of the Risk Assessment Agent is provided in your context. You MUST pass that exact JSON string into the 'risk_summary_json' argument of your tool.",
