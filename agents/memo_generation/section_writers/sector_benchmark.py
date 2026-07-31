@@ -58,10 +58,17 @@ class Section8Writer:
         for peer in self.top_peers:
             rev = peer.get('revenue')
             rev_str = self.format_num(rev)
+            
+            p_name = peer.get('entity_name')
+            p_name = p_name if p_name is not None else 'N/A'
+            
+            p_cik = peer.get('cik')
+            p_cik = p_cik if p_cik is not None else 'N/A'
+            
             peers_html += f"""
                 <tr>
-                    <td>{peer.get('entity_name', 'N/A')}</td>
-                    <td>{peer.get('cik', 'N/A')}</td>
+                    <td>{p_name}</td>
+                    <td>{p_cik}</td>
                     <td class="num">{rev_str}</td>
                 </tr>
             """
@@ -93,27 +100,32 @@ class Section8Writer:
         colors = []
 
         for m_name, m_data in self.metrics.items():
-            c_val = m_data.get('company_value', 0)
-            s_med = m_data.get('sector_median', 0)
-            s_mean = m_data.get('sector_mean', 0)
-            pct = m_data.get('company_percentile') or 0
-            pos = m_data.get('relative_position', 'N/A')
+            c_val = m_data.get('company_value')
+            s_med = m_data.get('sector_median')
+            s_mean = m_data.get('sector_mean')
+            pct = m_data.get('company_percentile')
+            pos = m_data.get('relative_position')
 
             labels.append(m_name)
-            pct_safe = pct if pct is not None else 0
-            company_radars.append(pct_safe)
-            percentiles.append(pct_safe)
+            company_radars.append(pct if pct is not None else 0)
+            percentiles.append(pct if pct is not None else 0)
             
             c_class = self.get_color_class(pos)
+
+            c_val_str = f"{c_val:,.2f}" if c_val is not None else "N/A"
+            s_med_str = f"{s_med:,.2f}" if s_med is not None else "N/A"
+            s_mean_str = f"{s_mean:,.2f}" if s_mean is not None else "N/A"
+            pct_str = f"{pct:.1f}%" if pct is not None else "N/A"
+            pos_str = pos if pos is not None else "N/A"
 
             metrics_html += f"""
                 <tr>
                     <td>{m_name}</td>
-                    <td class="num">{c_val:,.2f}</td>
-                    <td class="num">{s_med:,.2f}</td>
-                    <td class="num">{s_mean:,.2f}</td>
-                    <td class="num">{pct:.1f}%</td>
-                    <td><span class="badge {c_class}">{pos}</span></td>
+                    <td class="num">{c_val_str}</td>
+                    <td class="num">{s_med_str}</td>
+                    <td class="num">{s_mean_str}</td>
+                    <td class="num">{pct_str}</td>
+                    <td><span class="badge {c_class}">{pos_str}</span></td>
                 </tr>
             """
         metrics_html += """
