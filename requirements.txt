@@ -31,6 +31,9 @@ resend
 crewai
 crewai-tools
 litellm
+litellm[google]
+google-auth
+google-cloud-aiplatform
 sentence-transformers
 chromadb
 
